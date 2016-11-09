@@ -139,6 +139,8 @@ class ScanAPIScanner(object):
         sid = self._unique_scan_id()
         self._scanner.policy_copy(policy, sid)
         self._scanner.scan_add(targets=targets, name=sid)
+        scan = self._scan_from_scanid(sid)
+        self._scanner.action(action='scans/' + str(scan['id']) + '/launch', method='post')
         return {'scanid': sid}
 
     def scan_completed(self, scanid):
