@@ -49,6 +49,11 @@ class ScanAPIParser(object):
             m = re.search('output of "uname -a" is : Linux (\S+) ', unamestr)
             if m != None:
                 s['hostname'] = m.group(1)
+        elif '= Computer name' in entry['output']:
+            cnamestr = entry['output'].replace('\n', ' ')
+            m = re.search('(\S+)\s+= Computer name', cnamestr)
+            if m != None:
+                s['hostname'] = m.group(1)
 
         self._state[entry['host']] = s
 
