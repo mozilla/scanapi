@@ -56,10 +56,21 @@ class ScanAPIParser(object):
         if entry['cve'] == '':
             return
         newvuln = {
-                'cve':  entry['cve'],
-                'cvss': entry['cvss'],
-                'title': entry['name']
+                'cve':                 entry['cve'],
+                'cvss':                entry['cvss'],
+                'title':               entry['name'],
+                'vulnerable_packages': []
                 }
+
+        # see if we can pull the vulnerability package names out of the plugin
+        # output
+        if 'Remote package installed' in entry['output']:
+                vulnpkgstr = entry['output'].replace('\n', ' ')
+                m = re.findall('Remote package installed : \S+', vulnpkgstr)
+                for vpkg in m:
+                    newvuln['vulnerable_packages'].append(vpkg.split(':')[1].strip())
+
+
         self._state[entry['host']]['vulnerabilities'].append(newvuln)
 
     def _build_results(self):
