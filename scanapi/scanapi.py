@@ -8,11 +8,12 @@ import argparse
 import uuid
 import time
 import csv
+from functools import wraps
 import StringIO
 import re
 import yaml
 import json
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, abort
 from nessrest import ness6rest
 
 class ScanAPIConfig(object):
@@ -22,6 +23,7 @@ class ScanAPIConfig(object):
         self.nessususer = None
         self.nessuspass = None
         self.nessescacert = None
+        self.appkeys = []
 
 class ScanAPIParser(object):
     def __init__(self, content):
@@ -260,6 +262,12 @@ def load_config(confpath):
     cfg.nessuspass = yamlcfg['nessus']['password']
     if 'cacert' in sect:
         cfg.nessuscacert = yamlcfg['nessus']['cacert']
+    if 'appkeys' in yamlcfg:
+        sect = yamlcfg['appkeys']
+        for k, v in sect.iteritems():
+            if 'key' not in v:
+                raise ValueError('syntax error in appkey entry for {}'.format(k))
+            cfg.appkeys.append(v['key'])
 
 def domain():
     global scanner
@@ -279,6 +287,23 @@ def domain():
     scanner = ScanAPIScanner(cfg)
     app.run()
 
+def valid_appkey(viewfunc):
+    @wraps(viewfunc)
+    def decorated(*args, **kwargs):
+        appkey = request.headers.get('SCANAPIKEY')
+        valid = False
+        if len(cfg.appkeys) == 0: # no keys defined, don't require auth
+            return viewfunc(*args, **kwargs)
+        for key in cfg.appkeys:
+            if key == appkey:
+                valid = True
+                break
+        if valid:
+            return viewfunc(*args, **kwargs)
+        else:
+            abort(401)
+    return decorated
+
 @app.errorhandler(ServiceAPIError)
 def handle_serviceapierror(error):
     response = jsonify(error.to_dict())
@@ -286,6 +311,7 @@ def handle_serviceapierror(error):
     return response
 
 @app.route('/api/v1/scan/results')
+@valid_appkey
 def api_get_scan_results():
     ret = {'completed': False}
     scanid = request.args.get('scanid')
@@ -296,6 +322,7 @@ def api_get_scan_results():
     return json.dumps(ret)
 
 @app.route('/api/v1/scan', methods=['POST'])
+@valid_appkey
 def api_post_scan():
     targetlist = request.form['targets']
     # XXX We expect a comma seperated list of hostnames and IP addresses here, should add
@@ -304,6 +331,7 @@ def api_post_scan():
     return json.dumps(scanner.start_scan(targetlist, policy))
 
 @app.route('/api/v1/scan/purge', methods=['DELETE'])
+@valid_appkey
 def api_scan_purge():
     olderthan = int(request.args.get('olderthan'))
     if olderthan < 300:
@@ -311,6 +339,7 @@ def api_scan_purge():
     return json.dumps(scanner.scan_purge(olderthan))
 
 @app.route('/api/v1/policies')
+@valid_appkey
 def api_get_policies():
     return json.dumps(scanner.get_policies(filter_scanapi=True))
 
