@@ -176,10 +176,16 @@ class ScanAPIScanner(object):
         ret['details'] = ScanAPIParser(content).result()
         return ret
 
-    def get_policies(self):
+    def get_policies(self, filter_scanapi=False):
         self._scanner.action(action='policies', method='get')
         ret = []
         for p in self._scanner.res['policies']:
+            # if filter_scanapi is True, don't add any template copies scanapi creates
+            # when it creates a new scan; we only return templates that would be available
+            # for use in a scan
+            if filter_scanapi:
+                if p['name'].startswith('scanapi'):
+                    continue
             ret.append({'id': p['id'], 'name': p['name'], 'description': p['description']})
         return ret
 
@@ -238,7 +244,7 @@ def api_post_scan():
 
 @app.route('/api/v1/policies')
 def api_get_policies():
-    return json.dumps(scanner.get_policies())
+    return json.dumps(scanner.get_policies(filter_scanapi=True))
 
 @app.route('/api/v1', strict_slashes=False)
 def api_root():
