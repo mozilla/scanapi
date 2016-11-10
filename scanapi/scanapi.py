@@ -134,11 +134,19 @@ class ScanAPIScanner(object):
                 return t['id']
         raise Exception('unable to obtain ID for CLI folder')
 
-    def _scan_from_scanid(self, scanid):
+    def _all_scans(self):
         foldertagid = self._scan_tag_id()
         self._scanner.action(action='scans?folder_id=' + str(foldertagid),
                 method='get')
-        for scan in self._scanner.res['scans']:
+        return self._scanner.res['scans']
+
+    def _all_policies(self):
+        self._scanner.action(action='policies', method='get')
+        return self._scanner.res['policies']
+
+    def _scan_from_scanid(self, scanid):
+        scans = self._all_scans()
+        for scan in scans:
             if scan['name'] == scanid:
                 return scan
         raise Exception('scan {} not found'.format(scanid))
@@ -156,6 +164,34 @@ class ScanAPIScanner(object):
         if scan['status'] == 'completed':
             return True
         return False
+
+    def scan_purge(self, olderthan):
+        scans_removed = 0
+        policies_removed = 0
+        removescanids = []
+        removepolicyids = []
+        now = int(time.time())
+        # remove old scans
+        scans = self._all_scans()
+        if scans != None:
+            for scan in scans:
+                if scan['last_modification_date'] < (now - olderthan) and \
+                    scan['name'].startswith('scanapi'):
+                    removescanids.append(scan['id'])
+            for scanid in removescanids:
+                self._scanner.action(action='scans/' + str(scanid), method='delete')
+                scans_removed += 1
+        # remove old policies
+        policies = self._all_policies()
+        if policies != None:
+            for policy in policies:
+                if policy['last_modification_date'] < (now - olderthan) and \
+                    policy['name'].startswith('scanapi'):
+                    removepolicyids.append(policy['id'])
+            for policyid in removepolicyids:
+                self._scanner.action(action='policies/' + str(policyid), method='delete')
+                policies_removed += 1
+        return {"scans_removed": scans_removed, "policies_removed": policies_removed}
 
     def scan_results(self, scanid):
         ret = {}
@@ -177,9 +213,9 @@ class ScanAPIScanner(object):
         return ret
 
     def get_policies(self, filter_scanapi=False):
-        self._scanner.action(action='policies', method='get')
+        policies = self._all_policies()
         ret = []
-        for p in self._scanner.res['policies']:
+        for p in policies:
             # if filter_scanapi is True, don't add any template copies scanapi creates
             # when it creates a new scan; we only return templates that would be available
             # for use in a scan
@@ -241,6 +277,11 @@ def api_post_scan():
     # some validation prior to pushing this to the scanner
     policy = request.form['policy']
     return json.dumps(scanner.start_scan(targetlist, policy))
+
+@app.route('/api/v1/scan/purge', methods=['DELETE'])
+def api_scan_purge():
+    olderthan = int(request.args.get('olderthan'))
+    return json.dumps(scanner.scan_purge(olderthan))
 
 @app.route('/api/v1/policies')
 def api_get_policies():
