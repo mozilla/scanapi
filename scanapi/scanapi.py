@@ -159,6 +159,8 @@ class ScanAPIScanner(object):
 
     def _scan_from_scanid(self, scanid):
         scans = self._all_scans()
+        if scans == None:
+            return None
         for scan in scans:
             if scan['name'] == scanid:
                 return scan
@@ -174,6 +176,8 @@ class ScanAPIScanner(object):
 
     def scan_completed(self, scanid):
         scan = self._scan_from_scanid(scanid)
+        if scan == None:
+            return False
         if scan['status'] == 'completed':
             return True
         return False
