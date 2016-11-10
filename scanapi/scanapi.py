@@ -13,6 +13,8 @@ import StringIO
 import re
 import yaml
 import json
+import warnings
+from requests.packages.urllib3 import exceptions as requestexp
 from flask import Flask, request, jsonify, abort
 from nessrest import ness6rest
 
@@ -271,6 +273,7 @@ def load_config(confpath):
 
 def domain():
     global scanner
+    warnings.simplefilter('ignore', requestexp.SubjectAltNameWarning)
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', help='specify configuration file',
             metavar='confpath', default='./scanapi.yml', dest='confpath')
