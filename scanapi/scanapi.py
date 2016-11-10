@@ -292,7 +292,8 @@ def domain():
         sys.stderr.write('Error parsing config file: {}\n'.format(e))
         sys.exit(1)
     scanner = ScanAPIScanner(cfg)
-    app.run()
+    if __name__ == '__main__':
+        app.run()
 
 def valid_appkey(viewfunc):
     @wraps(viewfunc)
@@ -354,5 +355,4 @@ def api_get_policies():
 def api_root():
     return json.dumps({'status': 'ok'})
 
-if __name__ == '__main__':
-    domain()
+domain()
