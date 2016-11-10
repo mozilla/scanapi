@@ -18,6 +18,10 @@ from nessrest import ness6rest
 class ScanAPIConfig(object):
     def __init__(self):
         self.confpath = None
+        self.nessusurl = None
+        self.nessususer = None
+        self.nessuspass = None
+        self.nessescacert = None
 
 class ScanAPIParser(object):
     def __init__(self, content):
@@ -121,8 +125,13 @@ class ScanAPIScanner(object):
         self._url = cfg.nessusurl
         self._user = cfg.nessususer
         self._pass = cfg.nessuspass
+        caoption = ''
+        insecure = True
+        if cfg.nessuscacert != None:
+            caoption = cfg.nessuscacert
+            insecure = False
         self._scanner = ness6rest.Scanner(url=self._url, login=self._user, password=self._pass,
-                insecure=True)
+                insecure=insecure, ca_bundle=caoption)
 
     def _unique_scan_id(self):
         return 'scanapi-' + str(uuid.uuid4())
@@ -241,6 +250,8 @@ def load_config(confpath):
     cfg.nessusurl = yamlcfg['nessus']['url']
     cfg.nessususer = yamlcfg['nessus']['username']
     cfg.nessuspass = yamlcfg['nessus']['password']
+    if 'cacert' in sect:
+        cfg.nessuscacert = yamlcfg['nessus']['cacert']
 
 def domain():
     global scanner
