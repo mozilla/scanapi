@@ -12,7 +12,7 @@ import StringIO
 import re
 import yaml
 import json
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from nessrest import ness6rest
 
 class ScanAPIConfig(object):
@@ -234,6 +234,14 @@ class ScanAPIScanner(object):
             ret.append({'id': p['id'], 'name': p['name'], 'description': p['description']})
         return ret
 
+class ServiceAPIError(Exception):
+    def __init__(self, message, status_code):
+        self.message = message
+        self.status_code = status_code
+
+    def to_dict(self):
+        return {'message': self.message}
+
 app = Flask(__name__)
 cfg = ScanAPIConfig()
 scanner = None
@@ -271,6 +279,12 @@ def domain():
     scanner = ScanAPIScanner(cfg)
     app.run()
 
+@app.errorhandler(ServiceAPIError)
+def handle_serviceapierror(error):
+    response = jsonify(error.to_dict())
+    response.status_code = error.status_code
+    return response
+
 @app.route('/api/v1/scan/results')
 def api_get_scan_results():
     ret = {'completed': False}
@@ -292,6 +306,8 @@ def api_post_scan():
 @app.route('/api/v1/scan/purge', methods=['DELETE'])
 def api_scan_purge():
     olderthan = int(request.args.get('olderthan'))
+    if olderthan < 300:
+        raise ServiceAPIError('olderthan must be >= 300', 400)
     return json.dumps(scanner.scan_purge(olderthan))
 
 @app.route('/api/v1/policies')
