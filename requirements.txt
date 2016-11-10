@@ -1,4 +1,7 @@
 requests
+pyOpenSSL
+ndg-httpsclient
+pyasn1
 argparse
 nessrest
 PyYAML

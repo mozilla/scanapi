@@ -8,16 +8,24 @@ import argparse
 import uuid
 import time
 import csv
+from functools import wraps
 import StringIO
 import re
 import yaml
 import json
-from flask import Flask, request
+import warnings
+from requests.packages.urllib3 import exceptions as requestexp
+from flask import Flask, request, jsonify, abort
 from nessrest import ness6rest
 
 class ScanAPIConfig(object):
     def __init__(self):
         self.confpath = None
+        self.nessusurl = None
+        self.nessususer = None
+        self.nessuspass = None
+        self.nessescacert = None
+        self.appkeys = []
 
 class ScanAPIParser(object):
     def __init__(self, content):
@@ -121,8 +129,13 @@ class ScanAPIScanner(object):
         self._url = cfg.nessusurl
         self._user = cfg.nessususer
         self._pass = cfg.nessuspass
+        caoption = ''
+        insecure = True
+        if cfg.nessuscacert != None:
+            caoption = cfg.nessuscacert
+            insecure = False
         self._scanner = ness6rest.Scanner(url=self._url, login=self._user, password=self._pass,
-                insecure=True)
+                insecure=insecure, ca_bundle=caoption)
 
     def _unique_scan_id(self):
         return 'scanapi-' + str(uuid.uuid4())
@@ -134,11 +147,21 @@ class ScanAPIScanner(object):
                 return t['id']
         raise Exception('unable to obtain ID for CLI folder')
 
-    def _scan_from_scanid(self, scanid):
+    def _all_scans(self):
         foldertagid = self._scan_tag_id()
         self._scanner.action(action='scans?folder_id=' + str(foldertagid),
                 method='get')
-        for scan in self._scanner.res['scans']:
+        return self._scanner.res['scans']
+
+    def _all_policies(self):
+        self._scanner.action(action='policies', method='get')
+        return self._scanner.res['policies']
+
+    def _scan_from_scanid(self, scanid):
+        scans = self._all_scans()
+        if scans == None:
+            return None
+        for scan in scans:
             if scan['name'] == scanid:
                 return scan
         raise Exception('scan {} not found'.format(scanid))
@@ -153,9 +176,39 @@ class ScanAPIScanner(object):
 
     def scan_completed(self, scanid):
         scan = self._scan_from_scanid(scanid)
+        if scan == None:
+            return False
         if scan['status'] == 'completed':
             return True
         return False
+
+    def scan_purge(self, olderthan):
+        scans_removed = 0
+        policies_removed = 0
+        removescanids = []
+        removepolicyids = []
+        now = int(time.time())
+        # remove old scans
+        scans = self._all_scans()
+        if scans != None:
+            for scan in scans:
+                if scan['last_modification_date'] < (now - olderthan) and \
+                    scan['name'].startswith('scanapi'):
+                    removescanids.append(scan['id'])
+            for scanid in removescanids:
+                self._scanner.action(action='scans/' + str(scanid), method='delete')
+                scans_removed += 1
+        # remove old policies
+        policies = self._all_policies()
+        if policies != None:
+            for policy in policies:
+                if policy['last_modification_date'] < (now - olderthan) and \
+                    policy['name'].startswith('scanapi'):
+                    removepolicyids.append(policy['id'])
+            for policyid in removepolicyids:
+                self._scanner.action(action='policies/' + str(policyid), method='delete')
+                policies_removed += 1
+        return {"scans_removed": scans_removed, "policies_removed": policies_removed}
 
     def scan_results(self, scanid):
         ret = {}
@@ -176,12 +229,26 @@ class ScanAPIScanner(object):
         ret['details'] = ScanAPIParser(content).result()
         return ret
 
-    def get_policies(self):
-        self._scanner.action(action='policies', method='get')
+    def get_policies(self, filter_scanapi=False):
+        policies = self._all_policies()
         ret = []
-        for p in self._scanner.res['policies']:
+        for p in policies:
+            # if filter_scanapi is True, don't add any template copies scanapi creates
+            # when it creates a new scan; we only return templates that would be available
+            # for use in a scan
+            if filter_scanapi:
+                if p['name'].startswith('scanapi'):
+                    continue
             ret.append({'id': p['id'], 'name': p['name'], 'description': p['description']})
         return ret
+
+class ServiceAPIError(Exception):
+    def __init__(self, message, status_code):
+        self.message = message
+        self.status_code = status_code
+
+    def to_dict(self):
+        return {'message': self.message}
 
 app = Flask(__name__)
 cfg = ScanAPIConfig()
@@ -199,9 +266,18 @@ def load_config(confpath):
     cfg.nessusurl = yamlcfg['nessus']['url']
     cfg.nessususer = yamlcfg['nessus']['username']
     cfg.nessuspass = yamlcfg['nessus']['password']
+    if 'cacert' in sect:
+        cfg.nessuscacert = yamlcfg['nessus']['cacert']
+    if 'appkeys' in yamlcfg:
+        sect = yamlcfg['appkeys']
+        for k, v in sect.iteritems():
+            if 'key' not in v:
+                raise ValueError('syntax error in appkey entry for {}'.format(k))
+            cfg.appkeys.append(v['key'])
 
 def domain():
     global scanner
+    warnings.simplefilter('ignore', requestexp.SubjectAltNameWarning)
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', help='specify configuration file',
             metavar='confpath', default='./scanapi.yml', dest='confpath')
@@ -218,7 +294,31 @@ def domain():
     scanner = ScanAPIScanner(cfg)
     app.run()
 
+def valid_appkey(viewfunc):
+    @wraps(viewfunc)
+    def decorated(*args, **kwargs):
+        appkey = request.headers.get('SCANAPIKEY')
+        valid = False
+        if len(cfg.appkeys) == 0: # no keys defined, don't require auth
+            return viewfunc(*args, **kwargs)
+        for key in cfg.appkeys:
+            if key == appkey:
+                valid = True
+                break
+        if valid:
+            return viewfunc(*args, **kwargs)
+        else:
+            abort(401)
+    return decorated
+
+@app.errorhandler(ServiceAPIError)
+def handle_serviceapierror(error):
+    response = jsonify(error.to_dict())
+    response.status_code = error.status_code
+    return response
+
 @app.route('/api/v1/scan/results')
+@valid_appkey
 def api_get_scan_results():
     ret = {'completed': False}
     scanid = request.args.get('scanid')
@@ -229,6 +329,7 @@ def api_get_scan_results():
     return json.dumps(ret)
 
 @app.route('/api/v1/scan', methods=['POST'])
+@valid_appkey
 def api_post_scan():
     targetlist = request.form['targets']
     # XXX We expect a comma seperated list of hostnames and IP addresses here, should add
@@ -236,9 +337,18 @@ def api_post_scan():
     policy = request.form['policy']
     return json.dumps(scanner.start_scan(targetlist, policy))
 
+@app.route('/api/v1/scan/purge', methods=['DELETE'])
+@valid_appkey
+def api_scan_purge():
+    olderthan = int(request.args.get('olderthan'))
+    if olderthan < 300:
+        raise ServiceAPIError('olderthan must be >= 300', 400)
+    return json.dumps(scanner.scan_purge(olderthan))
+
 @app.route('/api/v1/policies')
+@valid_appkey
 def api_get_policies():
-    return json.dumps(scanner.get_policies())
+    return json.dumps(scanner.get_policies(filter_scanapi=True))
 
 @app.route('/api/v1', strict_slashes=False)
 def api_root():
