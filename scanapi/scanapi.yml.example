@@ -1,7 +1,7 @@
 nessus:
   url: https://nessus.server:8834
-  username: scanapi
-  password: password
+  accesskey: apiaccesskey
+  secretkey: apisecretkey
 appkeys:
   user1:
     key: user1key

@@ -22,8 +22,8 @@ class ScanAPIConfig(object):
     def __init__(self):
         self.confpath = None
         self.nessusurl = None
-        self.nessususer = None
-        self.nessuspass = None
+        self.nessusakey = None
+        self.nessusskey = None
         self.nessescacert = None
         self.appkeys = []
 
@@ -127,14 +127,14 @@ class ScanAPIParser(object):
 class ScanAPIScanner(object):
     def __init__(self, cfg):
         self._url = cfg.nessusurl
-        self._user = cfg.nessususer
-        self._pass = cfg.nessuspass
+        self._akey = cfg.nessusakey
+        self._skey = cfg.nessusskey
         caoption = ''
         insecure = True
         if cfg.nessuscacert != None:
             caoption = cfg.nessuscacert
             insecure = False
-        self._scanner = ness6rest.Scanner(url=self._url, login=self._user, password=self._pass,
+        self._scanner = ness6rest.Scanner(url=self._url, api_akey=self._akey, api_skey=self._skey,
                 insecure=insecure, ca_bundle=caoption)
 
     def _unique_scan_id(self):
@@ -261,11 +261,11 @@ def load_config(confpath):
     if 'nessus' not in yamlcfg:
         raise ValueError('missing nessus section')
     sect = yamlcfg['nessus']
-    if 'url' not in sect or 'username' not in sect or 'password' not in sect:
+    if 'url' not in sect or 'accesskey' not in sect or 'secretkey' not in sect:
         raise ValueError('nessus section incomplete')
     cfg.nessusurl = yamlcfg['nessus']['url']
-    cfg.nessususer = yamlcfg['nessus']['username']
-    cfg.nessuspass = yamlcfg['nessus']['password']
+    cfg.nessusakey = yamlcfg['nessus']['accesskey']
+    cfg.nessusskey = yamlcfg['nessus']['secretkey']
     if 'cacert' in sect:
         cfg.nessuscacert = yamlcfg['nessus']['cacert']
     if 'appkeys' in yamlcfg:
