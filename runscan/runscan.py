@@ -84,7 +84,8 @@ class ScanAPIMozDef(object):
                 'sourcename': self._sourcename,
                 'utctimestamp':  pytz.timezone('UTC').localize(datetime.datetime.utcnow()).isoformat(),
                 'asset': {
-                    'hostname': result['hostname']
+                    'hostname': result['hostname'],
+                    'ipaddress': result['ipaddress']
                     },
                 'vulnerabilities': result['vulnerabilities']
                 }
