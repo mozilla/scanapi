@@ -112,10 +112,12 @@ def config_from_env():
 def domain():
     global requestor
     warnings.simplefilter('ignore', requestexp.SubjectAltNameWarning)
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(epilog='The targets parameter can either contain' + \
+            ' a comma separated list of targets, or a path to a file containing a target' + \
+            ' list. If a file is used, it should contain one target per line.')
     parser.add_argument('--capath', help='path to ca certificate',
             metavar='capath')
-    parser.add_argument('-s', help='run scan on comma separated targets',
+    parser.add_argument('-s', help='run scan on comma separated targets, can also be filename with targets',
             metavar='targets')
     parser.add_argument('-p', help='policy to use when running scan',
             metavar='policy')
@@ -141,6 +143,13 @@ def domain():
         if args.p == None:
             sys.stderr.write('Error: policy must be specified with -p\n')
             sys.exit(1)
+        targets = None
+        try:
+            # if targets is a file, open it and build a target list
+            with open(args.s, 'r') as fd:
+                targets = ','.join([x.strip() for x in fd.readlines() if x[0] != '#'])
+        except IOError:
+            targets = args.s
         run_scan(args.s, args.p, follow=args.f)
     sys.exit(0)
 
