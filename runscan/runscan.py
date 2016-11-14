@@ -9,6 +9,8 @@ import os
 import time
 import json
 import requests
+import warnings
+from requests.packages.urllib3 import exceptions as requestexp
 from requests.auth import AuthBase
 
 class ScanAPIAuth(AuthBase):
@@ -20,10 +22,14 @@ class ScanAPIAuth(AuthBase):
         return r
 
 class ScanAPIRequestor(object):
-    def __init__(self, url, key):
+    def __init__(self, url, key, capath=None):
         self._url = url
         self._key = key
         self._baseurl = url + '/api/v1'
+        if capath != None:
+            self._verify = capath
+        else:
+            self._verify = True
         self.body = None
 
     def _urlfrombase(self, ep):
@@ -31,12 +37,14 @@ class ScanAPIRequestor(object):
 
     def request(self, ep, method, data=None, params=None):
         if method == 'get':
-            r = requests.get(self._urlfrombase(ep), auth=ScanAPIAuth(self._key), params=params)
+            r = requests.get(self._urlfrombase(ep), auth=ScanAPIAuth(self._key), params=params,
+                    verify=self._verify)
         elif method == 'delete':
-            r = requests.delete(self._urlfrombase(ep), auth=ScanAPIAuth(self._key), params=params)
+            r = requests.delete(self._urlfrombase(ep), auth=ScanAPIAuth(self._key), params=params,
+                    verify=self._verify)
         elif method == 'post':
             r = requests.post(self._urlfrombase(ep), auth=ScanAPIAuth(self._key),
-                    data=data)
+                    data=data, verify=self._verify)
         else:
             raise ValueError('invalid request method')
         if r.status_code != requests.codes.ok:
@@ -103,7 +111,10 @@ def config_from_env():
 
 def domain():
     global requestor
+    warnings.simplefilter('ignore', requestexp.SubjectAltNameWarning)
     parser = argparse.ArgumentParser()
+    parser.add_argument('--capath', help='path to ca certificate',
+            metavar='capath')
     parser.add_argument('-s', help='run scan on comma separated targets',
             metavar='targets')
     parser.add_argument('-p', help='policy to use when running scan',
@@ -116,7 +127,10 @@ def domain():
     parser.add_argument('-r', help='fetch results', metavar='scan id')
     args = parser.parse_args()
     ecfg = config_from_env()
-    requestor = ScanAPIRequestor(ecfg['apiurl'], ecfg['apikey'])
+    capath = True # verify parameter for requests, default to enabled
+    if args.capath != None:
+        capath = args.capath
+    requestor = ScanAPIRequestor(ecfg['apiurl'], ecfg['apikey'], capath=capath)
     if args.P:
         get_policies()
     elif args.r != None:
