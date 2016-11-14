@@ -10,6 +10,8 @@ import time
 import json
 import requests
 import warnings
+import datetime
+import pytz
 from requests.packages.urllib3 import exceptions as requestexp
 from requests.auth import AuthBase
 
@@ -68,6 +70,26 @@ class ScanAPIRequestor(object):
         self.request('policies', 'get')
         return self.body
 
+class ScanAPIMozDef(object):
+    def __init__(self, resp, mozdef_sourcename='scanapi'):
+        self._sourcename = mozdef_sourcename
+        self._events = [self._parse_result(x) for x in resp['results']['details']]
+
+    def post(self):
+        print self._events
+
+    def _parse_result(self, result):
+        event = {
+                'description': 'scanapi runscan mozdef emitter',
+                'sourcename': self._sourcename,
+                'utctimestamp':  pytz.timezone('UTC').localize(datetime.datetime.utcnow()).isoformat(),
+                'asset': {
+                    'hostname': result['hostname']
+                    },
+                'vulnerabilities': result['vulnerabilities']
+                }
+        return event
+
 requestor = None
 
 def get_policies():
@@ -76,14 +98,18 @@ def get_policies():
         sys.stdout.write('id={} name=\'{}\' description=\'{}\'\n'.format(x['id'],
             x['name'], x['description']))
 
-def get_results(scanid):
+def get_results(scanid, mozdef=None):
     resp = requestor.request_results(scanid)
-    sys.stdout.write(json.dumps(resp, indent=4) + '\n')
+    if mozdef == None:
+        sys.stdout.write(json.dumps(resp, indent=4) + '\n')
+    else:
+        mozdef = ScanAPIMozDef(resp)
+        mozdef.post()
 
 def purge_scans(seconds):
     sys.stdout.write(json.dumps(requestor.purge_scans(seconds), indent=4) + '\n')
 
-def run_scan(targets, policy, follow=False):
+def run_scan(targets, policy, follow=False, mozdef=None):
     # make sure the policy exists
     resp = requestor.request_policies()
     if not policy in [x['name'] for x in resp]:
@@ -117,6 +143,8 @@ def domain():
             ' list. If a file is used, it should contain one target per line.')
     parser.add_argument('--capath', help='path to ca certificate',
             metavar='capath')
+    parser.add_argument('--mozdef', help='emit results as vulnerability events to mozdef',
+            metavar='mozdefurl')
     parser.add_argument('-s', help='run scan on comma separated targets, can also be filename with targets',
             metavar='targets')
     parser.add_argument('-p', help='policy to use when running scan',
@@ -136,7 +164,7 @@ def domain():
     if args.P:
         get_policies()
     elif args.r != None:
-        get_results(args.r)
+        get_results(args.r, mozdef=args.mozdef)
     elif args.D != None:
         purge_scans(args.D)
     elif args.s != None:
@@ -150,7 +178,7 @@ def domain():
                 targets = ','.join([x.strip() for x in fd.readlines() if x[0] != '#'])
         except IOError:
             targets = args.s
-        run_scan(args.s, args.p, follow=args.f)
+        run_scan(args.s, args.p, follow=args.f, mozdef=args.mozdef)
     sys.exit(0)
 
 if __name__ == '__main__':
