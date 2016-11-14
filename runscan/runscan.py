@@ -32,6 +32,8 @@ class ScanAPIRequestor(object):
     def request(self, ep, method, data=None, params=None):
         if method == 'get':
             r = requests.get(self._urlfrombase(ep), auth=ScanAPIAuth(self._key), params=params)
+        elif method == 'delete':
+            r = requests.delete(self._urlfrombase(ep), auth=ScanAPIAuth(self._key), params=params)
         elif method == 'post':
             r = requests.post(self._urlfrombase(ep), auth=ScanAPIAuth(self._key),
                     data=data)
@@ -40,6 +42,10 @@ class ScanAPIRequestor(object):
         if r.status_code != requests.codes.ok:
             raise Exception('request failed with status code {}'.format(r.status_code))
         self.body = r.json()
+
+    def purge_scans(self, seconds):
+        self.request('scan/purge', 'delete', params={'olderthan': int(seconds)})
+        return self.body
 
     def request_results(self, scanid):
         self.request('scan/results', 'get', params={'scanid': scanid})
@@ -65,6 +71,9 @@ def get_policies():
 def get_results(scanid):
     resp = requestor.request_results(scanid)
     sys.stdout.write(json.dumps(resp, indent=4) + '\n')
+
+def purge_scans(seconds):
+    sys.stdout.write(json.dumps(requestor.purge_scans(seconds), indent=4) + '\n')
 
 def run_scan(targets, policy, follow=False):
     # make sure the policy exists
@@ -99,6 +108,8 @@ def domain():
             metavar='targets')
     parser.add_argument('-p', help='policy to use when running scan',
             metavar='policy')
+    parser.add_argument('-D', help='purge scans older than argument, must be >= 300',
+            metavar='seconds')
     parser.add_argument('-f', help='follow scan until complete and get results',
             action='store_true')
     parser.add_argument('-P', help='list policies', action='store_true')
@@ -110,6 +121,8 @@ def domain():
         get_policies()
     elif args.r != None:
         get_results(args.r)
+    elif args.D != None:
+        purge_scans(args.D)
     elif args.s != None:
         if args.p == None:
             sys.stderr.write('Error: policy must be specified with -p\n')
