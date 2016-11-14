@@ -11,6 +11,7 @@ import csv
 from functools import wraps
 import StringIO
 import re
+import ipaddr
 import yaml
 import json
 import warnings
@@ -28,9 +29,10 @@ class ScanAPIConfig(object):
         self.appkeys = []
 
 class ScanAPIParser(object):
-    def __init__(self, content):
+    def __init__(self, content, hostinfo):
         self._result = []
         self._content = content
+        self._hostinfo = hostinfo
         self._fd = StringIO.StringIO(self._content)
         self._reader = csv.reader(self._fd)
         self._state = {}
@@ -41,7 +43,8 @@ class ScanAPIParser(object):
         if entry['host'] not in self._state:
             s = {
                     'vulnerabilities': [],
-                    'hostname':        None
+                    'hostname':        None,
+                    'ipaddress':       None
                     }
         else:
             s = self._state[entry['host']]
@@ -50,6 +53,17 @@ class ScanAPIParser(object):
         # value
         if s['hostname'] == None:
             s['hostname'] = entry['host']
+
+        # attempt to determine the ip address; if our target is an ip just use that,
+        # otherwise try to locate the ip address using the supplementary host info
+        try:
+            ipaddr.IPAddress(entry['host'])
+            s['ipaddress'] = entry['host']
+        except:
+            for x in self._hostinfo:
+                if x['host-fqdn'] == entry['host']:
+                    s['ipaddress'] = x['host-ip']
+                    break
 
         # attempt to extract kernel hostname 
         if 'output of \"uname -a\" is' in entry['output']:
@@ -94,7 +108,8 @@ class ScanAPIParser(object):
             newres = {
                     'target':          k,
                     'vulnerabilities': v['vulnerabilities'],
-                    'hostname':        v['hostname']
+                    'hostname':        v['hostname'],
+                    'ipaddress':       v['ipaddress']
                     }
             self._result.append(newres)
 
@@ -166,6 +181,21 @@ class ScanAPIScanner(object):
                 return scan
         raise Exception('scan {} not found'.format(scanid))
 
+    def _scan_get_hosts(self, scan):
+        self._scanner.action(action='scans/' + str(scan['id']), method='get')
+        return self._scanner.res['hosts']
+
+    def _scan_host_details(self, scan, host):
+        self._scanner.action(action='scans/' + str(scan['id']) + '/hosts/' +
+                str(host['host_id']), method='get')
+        return self._scanner.res['info']
+
+    def _supplemental_hostinfo(self, scanid):
+        scan = self._scan_from_scanid(scanid)
+        hosts = self._scan_get_hosts(scan)
+        # for each host, gather some information we will merge into the result
+        return [self._scan_host_details(scan, x) for x in hosts]
+
     def start_scan(self, targets, policy):
         sid = self._unique_scan_id()
         self._scanner.policy_copy(policy, sid)
@@ -226,7 +256,8 @@ class ScanAPIScanner(object):
             time.sleep(0.5)
         content = self._scanner.action('scans/' + str(scan['id']) + '/export/' +
                 str(fileid) + '/download', method='get', download=True)
-        ret['details'] = ScanAPIParser(content).result()
+        hostinfo = self._supplemental_hostinfo(scanid)
+        ret['details'] = ScanAPIParser(content, hostinfo).result()
         return ret
 
     def get_policies(self, filter_scanapi=False):

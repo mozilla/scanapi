@@ -4,6 +4,7 @@ ndg-httpsclient
 pyasn1
 argparse
 nessrest
+ipaddr
 PyYAML
 flask
 pytz
