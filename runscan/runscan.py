@@ -181,6 +181,10 @@ def domain():
         except IOError:
             targets = args.s
         run_scan(args.s, args.p, follow=args.f, mozdef=args.mozdef)
+    else:
+        sys.stdout.write('Must specify something to do\n\n')
+        parser.print_help()
+        sys.exit(1)
     sys.exit(0)
 
 if __name__ == '__main__':
