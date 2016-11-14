@@ -26,6 +26,7 @@ class ScanAPIConfig(object):
         self.nessusakey = None
         self.nessusskey = None
         self.nessescacert = None
+        self.zone = 'scanapi'
         self.appkeys = []
 
 class ScanAPIParser(object):
@@ -257,6 +258,7 @@ class ScanAPIScanner(object):
         content = self._scanner.action('scans/' + str(scan['id']) + '/export/' +
                 str(fileid) + '/download', method='get', download=True)
         hostinfo = self._supplemental_hostinfo(scanid)
+        ret['zone'] = cfg.zone
         ret['details'] = ScanAPIParser(content, hostinfo).result()
         return ret
 
@@ -305,6 +307,10 @@ def load_config(confpath):
             if 'key' not in v:
                 raise ValueError('syntax error in appkey entry for {}'.format(k))
             cfg.appkeys.append(v['key'])
+    if 'scanapi' in yamlcfg:
+        sect = yamlcfg['scanapi']
+        if 'zone' in sect:
+            cfg.zone = yamlcfg['scanapi']['zone']
 
 def domain():
     global scanner

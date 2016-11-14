@@ -73,15 +73,16 @@ class ScanAPIRequestor(object):
 class ScanAPIMozDef(object):
     def __init__(self, resp, mozdef_sourcename='scanapi'):
         self._sourcename = mozdef_sourcename
-        self._events = [self._parse_result(x) for x in resp['results']['details']]
+        self._events = [self._parse_result(x, resp['results']['zone']) for x in resp['results']['details']]
 
     def post(self):
         print self._events
 
-    def _parse_result(self, result):
+    def _parse_result(self, result, zone):
         event = {
                 'description': 'scanapi runscan mozdef emitter',
                 'sourcename': self._sourcename,
+                'zone': zone,
                 'utctimestamp':  pytz.timezone('UTC').localize(datetime.datetime.utcnow()).isoformat(),
                 'asset': {
                     'hostname': result['hostname'],
