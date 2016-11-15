@@ -245,7 +245,7 @@ def domain():
                 targets = ','.join([x.strip() for x in fd.readlines() if x[0] != '#'])
         except IOError:
             targets = args.s
-        run_scan(args.s, args.p, follow=args.f, mozdef=args.mozdef)
+        run_scan(targets, args.p, follow=args.f, mozdef=args.mozdef)
     else:
         sys.stdout.write('Must specify something to do\n\n')
         parser.print_help()
