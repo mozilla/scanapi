@@ -42,7 +42,7 @@ class ScanAPIParser(object):
 
     def _hostinfo_locator(self, entry):
         for x in self._hostinfo:
-            if x['host-fqdn'] == entry['host']:
+            if 'host-fqdn' in x and x['host-fqdn'] == entry['host']:
                 return x
             if x['host-ip'] == entry['host']:
                 return x
