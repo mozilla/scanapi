@@ -57,8 +57,8 @@ class ScanAPIRequestor(object):
         self.request('scan/purge', 'delete', params={'olderthan': int(seconds)})
         return self.body
 
-    def request_results(self, scanid):
-        self.request('scan/results', 'get', params={'scanid': scanid})
+    def request_results(self, scanid, mincvss=None):
+        self.request('scan/results', 'get', params={'scanid': scanid, 'mincvss': mincvss})
         return self.body
 
     def start_scan(self, targets, policy):
@@ -76,7 +76,7 @@ class ScanAPIMozDef(object):
         self._events = [self._parse_result(x, resp['results']['zone']) for x in resp['results']['details']]
 
     def post(self):
-        print self._events
+        print json.dumps(self._events, indent=4)
 
     def _parse_result(self, result, zone):
         event = {
@@ -86,7 +86,8 @@ class ScanAPIMozDef(object):
                 'utctimestamp':  pytz.timezone('UTC').localize(datetime.datetime.utcnow()).isoformat(),
                 'asset': {
                     'hostname': result['hostname'],
-                    'ipaddress': result['ipaddress']
+                    'ipaddress': result['ipaddress'],
+                    'os': result['os']
                     },
                 'vulnerabilities': result['vulnerabilities']
                 }
@@ -100,8 +101,8 @@ def get_policies():
         sys.stdout.write('id={} name=\'{}\' description=\'{}\'\n'.format(x['id'],
             x['name'], x['description']))
 
-def get_results(scanid, mozdef=None):
-    resp = requestor.request_results(scanid)
+def get_results(scanid, mozdef=None, mincvss=None):
+    resp = requestor.request_results(scanid, mincvss=mincvss)
     if mozdef == None:
         sys.stdout.write(json.dumps(resp, indent=4) + '\n')
     else:
@@ -147,6 +148,8 @@ def domain():
             metavar='capath')
     parser.add_argument('--mozdef', help='emit results as vulnerability events to mozdef',
             metavar='mozdefurl')
+    parser.add_argument('--mincvss', help='filter vulnerabilities below specified cvss score',
+            metavar='cvss')
     parser.add_argument('-s', help='run scan on comma separated targets, can also be filename with targets',
             metavar='targets')
     parser.add_argument('-p', help='policy to use when running scan',
@@ -166,7 +169,7 @@ def domain():
     if args.P:
         get_policies()
     elif args.r != None:
-        get_results(args.r, mozdef=args.mozdef)
+        get_results(args.r, mozdef=args.mozdef, mincvss=args.mincvss)
     elif args.D != None:
         purge_scans(args.D)
     elif args.s != None:
