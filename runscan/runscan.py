@@ -78,11 +78,15 @@ class ScanAPIRequestor(object):
         return self.body
 
 class ScanAPIMozDef(object):
-    def __init__(self, resp, mozdef_sourcename='scanapi'):
+    def __init__(self, resp, mozdef, mozdef_sourcename='scanapi'):
         self._sourcename = mozdef_sourcename
+        self._url = mozdef
         self._events = [self._parse_result(x, resp['results']['zone']) for x in resp['results']['details']]
 
     def post(self):
+        for x in self._events:
+            requests.post(self._url, data=json.dumps(x))
+
         print json.dumps(self._events, indent=4)
 
     def _parse_result(self, result, zone):
@@ -95,10 +99,11 @@ class ScanAPIMozDef(object):
                     'hostname': result['hostname'],
                     'ipaddress': result['ipaddress'],
                     'os': result['os'],
-                    'owner': result['owner']
                     },
                 'vulnerabilities': result['vulnerabilities']
                 }
+        if 'owner' in result:
+            event['asset']['owner'] = result['owner']
         return event
 
 class ScanAPIServices(object):
@@ -160,7 +165,7 @@ def get_results(scanid, mozdef=None, mincvss=None, serviceapi=None):
     if mozdef == None:
         sys.stdout.write(json.dumps(resp, indent=4) + '\n')
     else:
-        mozdef = ScanAPIMozDef(resp)
+        mozdef = ScanAPIMozDef(resp, mozdef)
         mozdef.post()
 
 def purge_scans(seconds):
