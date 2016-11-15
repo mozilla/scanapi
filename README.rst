@@ -7,7 +7,7 @@ using the Nessus server, and fetch results. The primary intent is provided a
 more limited / restricted interface than is possible communicating directly
 with the Nessus API, and simplify creating scans and fetching results.
 
-.. code
+::
 
         < users > --------> < scanapi > --------> < nessus >
 
@@ -54,3 +54,40 @@ scanapi can be run directly for testing.
         $ ./scanapi.py
 
 For actual use, you would generally configure it with nginx and uwsgi.
+
+API endpoints
+-------------
+
+/api/v1 (GET)
+~~~~~~~~~~~~~
+
+Return status.
+
+/api/v1/scan/purge (DELETE)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Purge stored scans and results older than specified timeframe.
+
+/api/v1/scan (POST)
+~~~~~~~~~~~~~~~~~~~
+
+Run a new scan with a specified policy against indicated targets.
+
+/api/v1/scan/results (GET)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Fetch the results of a scan, formatted into a JSON document.
+
+/api/v1/scan/policies (GET)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Get a list of policies that can be specified when running a scan.
+
+runscan
+-------
+
+runscan is a command line tool that can be used to talk to scanapi. You need to set
+a couple environment variables.
+
+* SCANAPIURL - Set to URL where scanapi is listening
+* SCANAPIKEY - Set to an API key you configured in scanapi.yml if needed
