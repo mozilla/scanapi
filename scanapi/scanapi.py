@@ -11,6 +11,7 @@ import csv
 from functools import wraps
 import StringIO
 import re
+import ipaddr
 import yaml
 import json
 import warnings
@@ -25,23 +26,36 @@ class ScanAPIConfig(object):
         self.nessusakey = None
         self.nessusskey = None
         self.nessescacert = None
+        self.zone = 'scanapi'
         self.appkeys = []
 
 class ScanAPIParser(object):
-    def __init__(self, content):
+    def __init__(self, content, hostinfo, mincvss=None):
         self._result = []
         self._content = content
+        self._hostinfo = hostinfo
         self._fd = StringIO.StringIO(self._content)
         self._reader = csv.reader(self._fd)
         self._state = {}
+        self._mincvss = mincvss
         self._entry()
+
+    def _hostinfo_locator(self, entry):
+        for x in self._hostinfo:
+            if x['host-fqdn'] == entry['host']:
+                return x
+            if x['host-ip'] == entry['host']:
+                return x
+        return None
 
     def _pass_hostinfo(self, entry):
         s = None
         if entry['host'] not in self._state:
             s = {
                     'vulnerabilities': [],
-                    'hostname':        None
+                    'hostname':        None,
+                    'ipaddress':       None,
+                    'os':              None
                     }
         else:
             s = self._state[entry['host']]
@@ -50,6 +64,20 @@ class ScanAPIParser(object):
         # value
         if s['hostname'] == None:
             s['hostname'] = entry['host']
+
+        thishostinfo = self._hostinfo_locator(entry)
+
+        # attempt to determine the ip address; if our target is an ip just use that,
+        # otherwise try to locate the ip address using the supplementary host info
+        try:
+            ipaddr.IPAddress(entry['host'])
+            s['ipaddress'] = entry['host']
+        except:
+            if thishostinfo != None:
+                s['ipaddress'] = thishostinfo['host-ip']
+
+        if thishostinfo != None:
+            s['os'] = thishostinfo['operating-system']
 
         # attempt to extract kernel hostname 
         if 'output of \"uname -a\" is' in entry['output']:
@@ -75,6 +103,9 @@ class ScanAPIParser(object):
                 'vulnerable_packages': []
                 }
 
+        if self._mincvss != None and newvuln['cvss'] < self._mincvss:
+            return
+
         # see if we can pull the vulnerability package names out of the plugin
         # output
         if 'Remote package installed' in entry['output']:
@@ -94,7 +125,9 @@ class ScanAPIParser(object):
             newres = {
                     'target':          k,
                     'vulnerabilities': v['vulnerabilities'],
-                    'hostname':        v['hostname']
+                    'hostname':        v['hostname'],
+                    'ipaddress':       v['ipaddress'],
+                    'os':              v['os']
                     }
             self._result.append(newres)
 
@@ -166,6 +199,21 @@ class ScanAPIScanner(object):
                 return scan
         raise Exception('scan {} not found'.format(scanid))
 
+    def _scan_get_hosts(self, scan):
+        self._scanner.action(action='scans/' + str(scan['id']), method='get')
+        return self._scanner.res['hosts']
+
+    def _scan_host_details(self, scan, host):
+        self._scanner.action(action='scans/' + str(scan['id']) + '/hosts/' +
+                str(host['host_id']), method='get')
+        return self._scanner.res['info']
+
+    def _supplemental_hostinfo(self, scanid):
+        scan = self._scan_from_scanid(scanid)
+        hosts = self._scan_get_hosts(scan)
+        # for each host, gather some information we will merge into the result
+        return [self._scan_host_details(scan, x) for x in hosts]
+
     def start_scan(self, targets, policy):
         sid = self._unique_scan_id()
         self._scanner.policy_copy(policy, sid)
@@ -210,7 +258,7 @@ class ScanAPIScanner(object):
                 policies_removed += 1
         return {"scans_removed": scans_removed, "policies_removed": policies_removed}
 
-    def scan_results(self, scanid):
+    def scan_results(self, scanid, mincvss=None):
         ret = {}
         scan = self._scan_from_scanid(scanid)
         # export and transform the entire scan result set; use csv output here
@@ -226,7 +274,9 @@ class ScanAPIScanner(object):
             time.sleep(0.5)
         content = self._scanner.action('scans/' + str(scan['id']) + '/export/' +
                 str(fileid) + '/download', method='get', download=True)
-        ret['details'] = ScanAPIParser(content).result()
+        hostinfo = self._supplemental_hostinfo(scanid)
+        ret['zone'] = cfg.zone
+        ret['details'] = ScanAPIParser(content, hostinfo, mincvss=mincvss).result()
         return ret
 
     def get_policies(self, filter_scanapi=False):
@@ -274,6 +324,10 @@ def load_config(confpath):
             if 'key' not in v:
                 raise ValueError('syntax error in appkey entry for {}'.format(k))
             cfg.appkeys.append(v['key'])
+    if 'scanapi' in yamlcfg:
+        sect = yamlcfg['scanapi']
+        if 'zone' in sect:
+            cfg.zone = yamlcfg['scanapi']['zone']
 
 def domain():
     global scanner
@@ -323,10 +377,11 @@ def handle_serviceapierror(error):
 def api_get_scan_results():
     ret = {'completed': False}
     scanid = request.args.get('scanid')
+    mincvss = request.args.get('mincvss')
     if not scanner.scan_completed(scanid):
         return json.dumps(ret)
     ret['completed'] = True
-    ret['results'] = scanner.scan_results(scanid)
+    ret['results'] = scanner.scan_results(scanid, mincvss=mincvss)
     return json.dumps(ret)
 
 @app.route('/api/v1/scan', methods=['POST'])
