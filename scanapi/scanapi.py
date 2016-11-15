@@ -52,10 +52,11 @@ class ScanAPIParser(object):
         s = None
         if entry['host'] not in self._state:
             s = {
-                    'vulnerabilities': [],
-                    'hostname':        None,
-                    'ipaddress':       None,
-                    'os':              None
+                    'vulnerabilities':     [],
+                    'hostname':            None,
+                    'ipaddress':           None,
+                    'os':                  None,
+                    'credentialed_checks': False
                     }
         else:
             s = self._state[entry['host']]
@@ -91,6 +92,11 @@ class ScanAPIParser(object):
             if m != None:
                 s['hostname'] = m.group(1)
 
+        # flip credentialed checks if we find plugin output indicating the scan
+        # included successfully used credentials
+        if 'Credentialed checks : yes' in entry['output']:
+            s['credentialed_checks'] = True
+
         self._state[entry['host']] = s
 
     def _pass_cve(self, entry):
@@ -124,11 +130,12 @@ class ScanAPIParser(object):
     def _build_results(self):
         for k, v in self._state.iteritems():
             newres = {
-                    'target':          k,
-                    'vulnerabilities': v['vulnerabilities'],
-                    'hostname':        v['hostname'],
-                    'ipaddress':       v['ipaddress'],
-                    'os':              v['os']
+                    'target':              k,
+                    'vulnerabilities':     v['vulnerabilities'],
+                    'hostname':            v['hostname'],
+                    'ipaddress':           v['ipaddress'],
+                    'os':                  v['os'],
+                    'credentialed_checks': v['credentialed_checks']
                     }
             self._result.append(newres)
 
