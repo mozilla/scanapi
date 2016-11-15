@@ -22,7 +22,7 @@ Fetch code
         $ git clone https://github.com/mozilla/scanapi.git
         $ cd scanapi
         $ virtualenv myenv
-        $ source myenv/bin/active
+        $ source myenv/bin/activate
         $ pip install -r requirements.txt
 
 Configure scanapi
