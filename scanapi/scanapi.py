@@ -100,6 +100,7 @@ class ScanAPIParser(object):
                 'cve':                 entry['cve'],
                 'cvss':                entry['cvss'],
                 'title':               entry['name'],
+                'impact':              entry['risk'].lower(),
                 'vulnerable_packages': []
                 }
 
