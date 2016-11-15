@@ -117,6 +117,11 @@ class ScanAPIServices(object):
 
     def execute_indicators(self):
         ind = pyservicelib.Indicators()
+        # submit indicator to serviceapi for each host including if a credentialed
+        # check was successful or not
+        for x in self._content['results']['details']:
+            ind.add_host(x['hostname'], 'vuln', 'scanapi', x['credentialed_checks'])
+        ind.execute()
 
     def execute_ownership(self):
         s = pyservicelib.Search()
