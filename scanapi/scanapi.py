@@ -16,7 +16,7 @@ import yaml
 import json
 import warnings
 from requests.packages.urllib3 import exceptions as requestexp
-from flask import Flask, request, jsonify, abort
+from flask import Flask, Response, request, jsonify, abort
 from nessrest import ness6rest
 
 class ScanAPIConfig(object):
@@ -383,13 +383,17 @@ def handle_serviceapierror(error):
     response.status_code = error.status_code
     return response
 
+def response(content, mimetype='application/json'):
+    return Response(response=content,
+            mimetype=mimetype)
+
 @app.route('/api/v1/scan/results/csv')
 @valid_appkey
 def api_get_scan_results_csv():
     scanid = request.args.get('scanid')
     if not scanner.scan_completed(scanid):
         return 'incomplete'
-    return scanner.scan_results_csv(scanid)
+    return response(scanner.scan_results_csv(scanid), mimetype='text/plain')
 
 @app.route('/api/v1/scan/results')
 @valid_appkey
@@ -401,7 +405,7 @@ def api_get_scan_results():
         return json.dumps(ret)
     ret['completed'] = True
     ret['results'] = scanner.scan_results(scanid, mincvss=mincvss)
-    return json.dumps(ret)
+    return response(json.dumps(ret))
 
 @app.route('/api/v1/scan', methods=['POST'])
 @valid_appkey
@@ -410,7 +414,7 @@ def api_post_scan():
     # XXX We expect a comma seperated list of hostnames and IP addresses here, should add
     # some validation prior to pushing this to the scanner
     policy = request.form['policy']
-    return json.dumps(scanner.start_scan(targetlist, policy))
+    return response(json.dumps(scanner.start_scan(targetlist, policy)))
 
 @app.route('/api/v1/scan/purge', methods=['DELETE'])
 @valid_appkey
@@ -418,15 +422,15 @@ def api_scan_purge():
     olderthan = int(request.args.get('olderthan'))
     if olderthan < 300:
         raise ServiceAPIError('olderthan must be >= 300', 400)
-    return json.dumps(scanner.scan_purge(olderthan))
+    return response(json.dumps(scanner.scan_purge(olderthan)))
 
 @app.route('/api/v1/policies')
 @valid_appkey
 def api_get_policies():
-    return json.dumps(scanner.get_policies(filter_scanapi=True))
+    return response(json.dumps(scanner.get_policies(filter_scanapi=True)))
 
 @app.route('/api/v1', strict_slashes=False)
 def api_root():
-    return json.dumps({'status': 'ok'})
+    return response(json.dumps({'status': 'ok'}))
 
 domain()
