@@ -266,10 +266,8 @@ class ScanAPIScanner(object):
                 policies_removed += 1
         return {"scans_removed": scans_removed, "policies_removed": policies_removed}
 
-    def scan_results(self, scanid, mincvss=None):
-        ret = {}
+    def scan_results_csv(self, scanid):
         scan = self._scan_from_scanid(scanid)
-        # export and transform the entire scan result set; use csv output here
         postdata = {'format': 'csv'}
         self._scanner.action(action='scans/' + str(scan['id']) + '/export',
                 method='post', extra=postdata)
@@ -280,8 +278,13 @@ class ScanAPIScanner(object):
             if self._scanner.res['status'] == 'ready':
                 break
             time.sleep(0.5)
-        content = self._scanner.action('scans/' + str(scan['id']) + '/export/' +
+        return self._scanner.action('scans/' + str(scan['id']) + '/export/' +
                 str(fileid) + '/download', method='get', download=True)
+
+    def scan_results(self, scanid, mincvss=None):
+        ret = {}
+        # export and transform the entire scan result set; use csv output here
+        content = self.scan_results_csv(scanid)
         hostinfo = self._supplemental_hostinfo(scanid)
         ret['zone'] = cfg.zone
         ret['details'] = ScanAPIParser(content, hostinfo, mincvss=mincvss).result()
@@ -379,6 +382,14 @@ def handle_serviceapierror(error):
     response = jsonify(error.to_dict())
     response.status_code = error.status_code
     return response
+
+@app.route('/api/v1/scan/results/csv')
+@valid_appkey
+def api_get_scan_results_csv():
+    scanid = request.args.get('scanid')
+    if not scanner.scan_completed(scanid):
+        return 'incomplete'
+    return scanner.scan_results_csv(scanid)
 
 @app.route('/api/v1/scan/results')
 @valid_appkey
