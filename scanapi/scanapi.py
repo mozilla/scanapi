@@ -205,7 +205,7 @@ class ScanAPIScanner(object):
         for scan in scans:
             if scan['name'] == scanid:
                 return scan
-        raise Exception('scan {} not found'.format(scanid))
+        raise ScanAPIError('scan {} not found'.format(scanid), 404)
 
     def _scan_get_hosts(self, scan):
         self._scanner.action(action='scans/' + str(scan['id']), method='get')
@@ -225,7 +225,12 @@ class ScanAPIScanner(object):
     def start_scan(self, targets, policy):
         sid = self._unique_scan_id()
         self._scanner.policy_copy(policy, sid)
-        self._scanner.scan_add(targets=targets, name=sid)
+        try:
+            self._scanner.scan_add(targets=targets, name=sid)
+        except KeyError:
+            # catch KeyError from ness6rest, which we can use here to indicate
+            # something went wrong during creation
+            raise ScanAPIError('scan creation failed', 400)
         scan = self._scan_from_scanid(sid)
         self._scanner.action(action='scans/' + str(scan['id']) + '/launch', method='post')
         return {'scanid': sid}
