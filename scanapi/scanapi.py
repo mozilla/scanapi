@@ -303,7 +303,7 @@ class ScanAPIScanner(object):
             ret.append({'id': p['id'], 'name': p['name'], 'description': p['description']})
         return ret
 
-class ServiceAPIError(Exception):
+class ScanAPIError(Exception):
     def __init__(self, message, status_code):
         self.message = message
         self.status_code = status_code
@@ -377,8 +377,8 @@ def valid_appkey(viewfunc):
             abort(401)
     return decorated
 
-@app.errorhandler(ServiceAPIError)
-def handle_serviceapierror(error):
+@app.errorhandler(ScanAPIError)
+def handle_scanapierror(error):
     response = jsonify(error.to_dict())
     response.status_code = error.status_code
     return response
@@ -421,7 +421,7 @@ def api_post_scan():
 def api_scan_purge():
     olderthan = int(request.args.get('olderthan'))
     if olderthan < 300:
-        raise ServiceAPIError('olderthan must be >= 300', 400)
+        raise ScanAPIError('olderthan must be >= 300', 400)
     return response(json.dumps(scanner.scan_purge(olderthan)))
 
 @app.route('/api/v1/policies')
