@@ -99,16 +99,17 @@ class ScanAPIParser(object):
 
         self._state[entry['host']] = s
 
-    def _pass_cve(self, entry):
-        if entry['cve'] == '':
+    def _pass_vuln(self, entry):
+        # if no impact, do not include it in modified json results
+        if entry['risk'].lower() == 'none':
             return
         newvuln = {
-                'cve':                 entry['cve'],
-                'cvss':                entry['cvss'],
-                'title':               entry['name'],
-                'impact':              entry['risk'].lower(),
+                'risk': entry['risk'].lower(),
+                'name': entry['name'],
                 'vulnerable_packages': []
                 }
+        if entry['cve'] != '':
+            newvuln.update({'cve': entry['cve'], 'cvss': entry['cvss']})
 
         if self._mincvss != None and newvuln['cvss'] < self._mincvss:
             return
@@ -159,7 +160,7 @@ class ScanAPIParser(object):
                     'output':      row[12]
                     }
             self._pass_hostinfo(entry)
-            self._pass_cve(entry)
+            self._pass_vuln(entry)
         self._build_results()
 
     def result(self):
