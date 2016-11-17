@@ -53,6 +53,7 @@ class ScanAPIParser(object):
         if entry['host'] not in self._state:
             s = {
                     'vulnerabilities':     [],
+                    'ports':               set(),
                     'hostname':            None,
                     'ipaddress':           None,
                     'os':                  None,
@@ -99,6 +100,13 @@ class ScanAPIParser(object):
 
         self._state[entry['host']] = s
 
+    def _pass_portinfo(self, entry):
+        s = self._state[entry['host']]
+        m = re.search('Port (\S+) was found to be open', entry['output'])
+        if m != None:
+            s['ports'].add(m.group(1))
+        self._state[entry['host']] = s
+
     def _pass_vuln(self, entry):
         # if no impact, do not include it in modified json results
         if entry['risk'].lower() == 'none':
@@ -106,10 +114,14 @@ class ScanAPIParser(object):
         newvuln = {
                 'risk': entry['risk'].lower(),
                 'name': entry['name'],
+                'output': entry['output'],
                 'vulnerable_packages': []
                 }
         if entry['cve'] != '':
             newvuln.update({'cve': entry['cve'], 'cvss': entry['cvss']})
+
+        if entry['port'] != '0':
+            newvuln.update({'port': int(entry['port']), 'protocol': entry['protocol']})
 
         if self._mincvss != None and newvuln['cvss'] < self._mincvss:
             return
@@ -133,6 +145,7 @@ class ScanAPIParser(object):
             newres = {
                     'target':              k,
                     'vulnerabilities':     v['vulnerabilities'],
+                    'ports':               list(v['ports']),
                     'hostname':            v['hostname'],
                     'ipaddress':           v['ipaddress'],
                     'os':                  v['os'],
@@ -160,6 +173,7 @@ class ScanAPIParser(object):
                     'output':      row[12]
                     }
             self._pass_hostinfo(entry)
+            self._pass_portinfo(entry)
             self._pass_vuln(entry)
         self._build_results()
 
