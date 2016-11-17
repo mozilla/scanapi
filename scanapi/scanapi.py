@@ -16,7 +16,7 @@ import yaml
 import json
 import warnings
 from requests.packages.urllib3 import exceptions as requestexp
-from flask import Flask, request, jsonify, abort
+from flask import Flask, Response, request, jsonify, abort
 from nessrest import ness6rest
 
 class ScanAPIConfig(object):
@@ -99,16 +99,17 @@ class ScanAPIParser(object):
 
         self._state[entry['host']] = s
 
-    def _pass_cve(self, entry):
-        if entry['cve'] == '':
+    def _pass_vuln(self, entry):
+        # if no impact, do not include it in modified json results
+        if entry['risk'].lower() == 'none':
             return
         newvuln = {
-                'cve':                 entry['cve'],
-                'cvss':                entry['cvss'],
-                'title':               entry['name'],
-                'impact':              entry['risk'].lower(),
+                'risk': entry['risk'].lower(),
+                'name': entry['name'],
                 'vulnerable_packages': []
                 }
+        if entry['cve'] != '':
+            newvuln.update({'cve': entry['cve'], 'cvss': entry['cvss']})
 
         if self._mincvss != None and newvuln['cvss'] < self._mincvss:
             return
@@ -159,7 +160,7 @@ class ScanAPIParser(object):
                     'output':      row[12]
                     }
             self._pass_hostinfo(entry)
-            self._pass_cve(entry)
+            self._pass_vuln(entry)
         self._build_results()
 
     def result(self):
@@ -205,7 +206,7 @@ class ScanAPIScanner(object):
         for scan in scans:
             if scan['name'] == scanid:
                 return scan
-        raise Exception('scan {} not found'.format(scanid))
+        raise ScanAPIError('scan {} not found'.format(scanid), 404)
 
     def _scan_get_hosts(self, scan):
         self._scanner.action(action='scans/' + str(scan['id']), method='get')
@@ -225,7 +226,12 @@ class ScanAPIScanner(object):
     def start_scan(self, targets, policy):
         sid = self._unique_scan_id()
         self._scanner.policy_copy(policy, sid)
-        self._scanner.scan_add(targets=targets, name=sid)
+        try:
+            self._scanner.scan_add(targets=targets, name=sid)
+        except KeyError:
+            # catch KeyError from ness6rest, which we can use here to indicate
+            # something went wrong during creation
+            raise ScanAPIError('scan creation failed', 400)
         scan = self._scan_from_scanid(sid)
         self._scanner.action(action='scans/' + str(scan['id']) + '/launch', method='post')
         return {'scanid': sid}
@@ -266,10 +272,8 @@ class ScanAPIScanner(object):
                 policies_removed += 1
         return {"scans_removed": scans_removed, "policies_removed": policies_removed}
 
-    def scan_results(self, scanid, mincvss=None):
-        ret = {}
+    def scan_results_csv(self, scanid):
         scan = self._scan_from_scanid(scanid)
-        # export and transform the entire scan result set; use csv output here
         postdata = {'format': 'csv'}
         self._scanner.action(action='scans/' + str(scan['id']) + '/export',
                 method='post', extra=postdata)
@@ -280,8 +284,13 @@ class ScanAPIScanner(object):
             if self._scanner.res['status'] == 'ready':
                 break
             time.sleep(0.5)
-        content = self._scanner.action('scans/' + str(scan['id']) + '/export/' +
+        return self._scanner.action('scans/' + str(scan['id']) + '/export/' +
                 str(fileid) + '/download', method='get', download=True)
+
+    def scan_results(self, scanid, mincvss=None):
+        ret = {}
+        # export and transform the entire scan result set; use csv output here
+        content = self.scan_results_csv(scanid)
         hostinfo = self._supplemental_hostinfo(scanid)
         ret['zone'] = cfg.zone
         ret['details'] = ScanAPIParser(content, hostinfo, mincvss=mincvss).result()
@@ -300,7 +309,7 @@ class ScanAPIScanner(object):
             ret.append({'id': p['id'], 'name': p['name'], 'description': p['description']})
         return ret
 
-class ServiceAPIError(Exception):
+class ScanAPIError(Exception):
     def __init__(self, message, status_code):
         self.message = message
         self.status_code = status_code
@@ -374,11 +383,23 @@ def valid_appkey(viewfunc):
             abort(401)
     return decorated
 
-@app.errorhandler(ServiceAPIError)
-def handle_serviceapierror(error):
+@app.errorhandler(ScanAPIError)
+def handle_scanapierror(error):
     response = jsonify(error.to_dict())
     response.status_code = error.status_code
     return response
+
+def response(content, mimetype='application/json'):
+    return Response(response=content,
+            mimetype=mimetype)
+
+@app.route('/api/v1/scan/results/csv')
+@valid_appkey
+def api_get_scan_results_csv():
+    scanid = request.args.get('scanid')
+    if not scanner.scan_completed(scanid):
+        return 'incomplete'
+    return response(scanner.scan_results_csv(scanid), mimetype='text/plain')
 
 @app.route('/api/v1/scan/results')
 @valid_appkey
@@ -390,7 +411,7 @@ def api_get_scan_results():
         return json.dumps(ret)
     ret['completed'] = True
     ret['results'] = scanner.scan_results(scanid, mincvss=mincvss)
-    return json.dumps(ret)
+    return response(json.dumps(ret))
 
 @app.route('/api/v1/scan', methods=['POST'])
 @valid_appkey
@@ -399,23 +420,23 @@ def api_post_scan():
     # XXX We expect a comma seperated list of hostnames and IP addresses here, should add
     # some validation prior to pushing this to the scanner
     policy = request.form['policy']
-    return json.dumps(scanner.start_scan(targetlist, policy))
+    return response(json.dumps(scanner.start_scan(targetlist, policy)))
 
 @app.route('/api/v1/scan/purge', methods=['DELETE'])
 @valid_appkey
 def api_scan_purge():
     olderthan = int(request.args.get('olderthan'))
     if olderthan < 300:
-        raise ServiceAPIError('olderthan must be >= 300', 400)
-    return json.dumps(scanner.scan_purge(olderthan))
+        raise ScanAPIError('olderthan must be >= 300', 400)
+    return response(json.dumps(scanner.scan_purge(olderthan)))
 
 @app.route('/api/v1/policies')
 @valid_appkey
 def api_get_policies():
-    return json.dumps(scanner.get_policies(filter_scanapi=True))
+    return response(json.dumps(scanner.get_policies(filter_scanapi=True)))
 
 @app.route('/api/v1', strict_slashes=False)
 def api_root():
-    return json.dumps({'status': 'ok'})
+    return response(json.dumps({'status': 'ok'}))
 
 domain()

@@ -44,7 +44,7 @@ class ScanAPIRequestor(object):
     def _urlfrombase(self, ep):
         return self._baseurl + '/' + ep
 
-    def request(self, ep, method, data=None, params=None):
+    def request(self, ep, method, data=None, params=None, jsonresponse=True):
         if method == 'get':
             r = requests.get(self._urlfrombase(ep), auth=ScanAPIAuth(self._key), params=params,
                     verify=self._verify)
@@ -58,7 +58,10 @@ class ScanAPIRequestor(object):
             raise ValueError('invalid request method')
         if r.status_code != requests.codes.ok:
             raise Exception('request failed with status code {}'.format(r.status_code))
-        self.body = r.json()
+        if jsonresponse:
+            self.body = r.json()
+        else:
+            self.body = r.text
 
     def purge_scans(self, seconds):
         self.request('scan/purge', 'delete', params={'olderthan': int(seconds)})
@@ -66,6 +69,11 @@ class ScanAPIRequestor(object):
 
     def request_results(self, scanid, mincvss=None):
         self.request('scan/results', 'get', params={'scanid': scanid, 'mincvss': mincvss})
+        return self.body
+
+    def request_results_csv(self, scanid):
+        self.request('scan/results/csv', 'get', params={'scanid': scanid},
+                jsonresponse=False)
         return self.body
 
     def start_scan(self, targets, policy):
@@ -158,7 +166,10 @@ def get_policies():
         sys.stdout.write('id={} name=\'{}\' description=\'{}\'\n'.format(x['id'],
             x['name'], x['description']))
 
-def get_results(scanid, mozdef=None, mincvss=None, serviceapi=None):
+def get_results(scanid, mozdef=None, mincvss=None, serviceapi=None, csv=False):
+    if csv:
+        sys.stdout.write(requestor.request_results_csv(scanid))
+        return
     resp = requestor.request_results(scanid, mincvss=mincvss)
     if serviceapi != None:
         resp = ScanAPIServices(resp, serviceapi).execute()
@@ -205,6 +216,8 @@ def domain():
             ' list. If a file is used, it should contain one target per line.')
     parser.add_argument('--capath', help='path to ca certificate',
             metavar='capath')
+    parser.add_argument('--csv', help='fetch raw results in csv format instead of modified json',
+            action='store_true')
     parser.add_argument('--mozdef', help='emit results as vulnerability events to mozdef',
             metavar='mozdefurl')
     parser.add_argument('--mincvss', help='filter vulnerabilities below specified cvss score',
@@ -231,7 +244,7 @@ def domain():
         get_policies()
     elif args.r != None:
         get_results(args.r, mozdef=args.mozdef, mincvss=args.mincvss,
-                serviceapi=args.serviceapi)
+                serviceapi=args.serviceapi, csv=args.csv)
     elif args.D != None:
         purge_scans(args.D)
     elif args.s != None:
