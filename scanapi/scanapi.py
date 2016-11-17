@@ -106,10 +106,14 @@ class ScanAPIParser(object):
         newvuln = {
                 'risk': entry['risk'].lower(),
                 'name': entry['name'],
+                'output': entry['output'],
                 'vulnerable_packages': []
                 }
         if entry['cve'] != '':
             newvuln.update({'cve': entry['cve'], 'cvss': entry['cvss']})
+
+        if entry['port'] != '0':
+            newvuln.update({'port': int(entry['port']), 'protocol': entry['protocol']})
 
         if self._mincvss != None and newvuln['cvss'] < self._mincvss:
             return
