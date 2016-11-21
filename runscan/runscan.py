@@ -90,12 +90,16 @@ class ScanAPIMozDef(object):
         self._sourcename = mozdef_sourcename
         self._url = mozdef
         self._events = [self._parse_result(x, resp['results']['zone']) for x in resp['results']['details']]
+        self._use_stdout = False
+        if self._url == 'stdout':
+            self._use_stdout = True
 
     def post(self):
-        for x in self._events:
-            requests.post(self._url, data=json.dumps(x))
-
-        print json.dumps(self._events, indent=4)
+        if self._use_stdout:
+            sys.stdout.write(json.dumps(self._events, indent=4) + '\n')
+        else:
+            for x in self._events:
+                requests.post(self._url, data=json.dumps(x))
 
     def _parse_result(self, result, zone):
         event = {
@@ -218,7 +222,8 @@ def domain():
             metavar='capath')
     parser.add_argument('--csv', help='fetch raw results in csv format instead of modified json',
             action='store_true')
-    parser.add_argument('--mozdef', help='emit results as vulnerability events to mozdef',
+    parser.add_argument('--mozdef', help='emit results as vulnerability events to mozdef, ' + \
+            'use \'stdout\' as url to just print json to stdout',
             metavar='mozdefurl')
     parser.add_argument('--mincvss', help='filter vulnerabilities below specified cvss score',
             metavar='cvss')
