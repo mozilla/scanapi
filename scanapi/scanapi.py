@@ -136,6 +136,11 @@ class ScanAPIParser(object):
                 m = re.findall('Remote package installed : \S+', vulnpkgstr)
                 for vpkg in m:
                     newvuln['vulnerable_packages'].append(vpkg.split(':')[1].strip())
+        elif 'Installed package :' in entry['output']:
+                vulnpkgstr = entry['output'].replace('\n', ' ')
+                m = re.findall('Installed package : \S+', vulnpkgstr)
+                for vpkg in m:
+                    newvuln['vulnerable_packages'].append(vpkg.split(':')[1].strip())
         else:
             m = re.search('Path\s+:([^\n]+)', entry['output'])
             if m != None:
