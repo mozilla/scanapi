@@ -81,7 +81,7 @@ class ScanAPIParser(object):
             if thishostinfo != None:
                 s['ipaddress'] = thishostinfo['host-ip']
 
-        if thishostinfo != None:
+        if thishostinfo != None and 'operating-system' in thishostinfo:
             s['os'] = thishostinfo['operating-system']
 
         # attempt to extract kernel hostname 
