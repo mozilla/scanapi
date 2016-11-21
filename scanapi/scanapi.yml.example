@@ -2,6 +2,8 @@ nessus:
   url: https://nessus.server:8834
   accesskey: apiaccesskey
   secretkey: apisecretkey
+scanapi:
+  zone: myzonename
 appkeys:
   user1:
     key: user1key

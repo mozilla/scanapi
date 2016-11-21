@@ -39,6 +39,9 @@ You will need to create a user in your Nessus server that scanapi will authentic
 to Nessus as, and you need to create API keys for that user. These should be added to
 the scanapi configuration file.
 
+The ``zone`` value can be set to a name that will be included in the result set, to
+differentiate the results from other instances of scanapi that may be running.
+
 The ``appkeys`` section can be used to specify application keys, one of which
 must be sent in the SCANAPIKEY header to authenticate when making requests to the
 API. If no ``appkeys`` section is present, no authentication against scanapi will
