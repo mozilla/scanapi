@@ -7,6 +7,8 @@ import sys
 import argparse
 import uuid
 import time
+import datetime
+import pytz
 import csv
 from functools import wraps
 import StringIO
@@ -30,10 +32,11 @@ class ScanAPIConfig(object):
         self.appkeys = []
 
 class ScanAPIParser(object):
-    def __init__(self, content, hostinfo, mincvss=None):
+    def __init__(self, content, hostinfo, timeinfo, mincvss=None):
         self._result = []
         self._content = content
         self._hostinfo = hostinfo
+        self._timeinfo = timeinfo
         self._fd = StringIO.StringIO(self._content)
         self._reader = csv.reader(self._fd)
         self._state = {}
@@ -149,7 +152,9 @@ class ScanAPIParser(object):
                     'hostname':            v['hostname'],
                     'ipaddress':           v['ipaddress'],
                     'os':                  v['os'],
-                    'credentialed_checks': v['credentialed_checks']
+                    'credentialed_checks': v['credentialed_checks'],
+                    'scan_start':          self._timeinfo['start'],
+                    'scan_end':            self._timeinfo['end']
                     }
             self._result.append(newres)
 
@@ -231,11 +236,25 @@ class ScanAPIScanner(object):
                 str(host['host_id']), method='get')
         return self._scanner.res['info']
 
+    def _scan_details(self, scan):
+        self._scanner.action(action='scans/' + str(scan['id']), method='get')
+        return self._scanner.res
+
     def _supplemental_hostinfo(self, scanid):
         scan = self._scan_from_scanid(scanid)
         hosts = self._scan_get_hosts(scan)
         # for each host, gather some information we will merge into the result
         return [self._scan_host_details(scan, x) for x in hosts]
+
+    def _supplemental_timeinfo(self, scanid):
+        scan = self._scan_from_scanid(scanid)
+        scandetails = self._scan_details(scan)
+        start = datetime.datetime.utcfromtimestamp(scandetails['info']['scan_start'])
+        end = datetime.datetime.utcfromtimestamp(scandetails['info']['scan_end'])
+        return {
+                'start': pytz.timezone('UTC').localize(start).isoformat(),
+                'end': pytz.timezone('UTC').localize(end).isoformat()
+                }
 
     def start_scan(self, targets, policy):
         sid = self._unique_scan_id()
@@ -306,8 +325,9 @@ class ScanAPIScanner(object):
         # export and transform the entire scan result set; use csv output here
         content = self.scan_results_csv(scanid)
         hostinfo = self._supplemental_hostinfo(scanid)
+        timeinfo = self._supplemental_timeinfo(scanid)
         ret['zone'] = cfg.zone
-        ret['details'] = ScanAPIParser(content, hostinfo, mincvss=mincvss).result()
+        ret['details'] = ScanAPIParser(content, hostinfo, timeinfo, mincvss=mincvss).result()
         return ret
 
     def get_policies(self, filter_scanapi=False):
