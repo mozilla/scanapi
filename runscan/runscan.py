@@ -114,7 +114,8 @@ class ScanAPIMozDef(object):
                     },
                 'vulnerabilities': result['vulnerabilities'],
                 'scan_start': result['scan_start'],
-                'scan_end': result['scan_end']
+                'scan_end': result['scan_end'],
+                'credentialed_checks': result['credentialed_checks']
                 }
         if 'owner' in result:
             event['asset']['owner'] = result['owner']
