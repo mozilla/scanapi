@@ -106,6 +106,7 @@ class ScanAPIMozDef(object):
                 'description': 'scanapi runscan mozdef emitter',
                 'sourcename': self._sourcename,
                 'zone': zone,
+                'version': 2,
                 'utctimestamp':  pytz.timezone('UTC').localize(datetime.datetime.utcnow()).isoformat(),
                 'asset': {
                     'hostname': result['hostname'],
