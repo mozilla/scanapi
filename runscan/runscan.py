@@ -67,6 +67,12 @@ class ScanAPIRequestor(object):
         self.request('scan/purge', 'delete', params={'olderthan': int(seconds)})
         return self.body
 
+    # XXX this is pretty inefficient right now as it pulls a result set down to validate
+    # completion, we should have a better way to tell if the scan is done besides requesting
+    # the results
+    def request_scan_completed(self, scanid):
+        return self.request_results(scanid)['completed']
+
     def request_results(self, scanid, mincvss=None):
         self.request('scan/results', 'get', params={'scanid': scanid, 'mincvss': mincvss})
         return self.body
@@ -175,6 +181,9 @@ def get_policies():
             x['name'], x['description']))
 
 def get_results(scanid, mozdef=None, mincvss=None, serviceapi=None, csv=False):
+    if not requestor.request_scan_completed(scanid):
+        sys.stdout.write('Scan incomplete\n')
+        return
     if csv:
         sys.stdout.write(requestor.request_results_csv(scanid))
         return
@@ -197,17 +206,7 @@ def run_scan(targets, policy, follow=False, mozdef=None):
         sys.stderr.write('Error: policy {} not found\n'.format(policy))
         sys.exit(1)
     # XXX should validate target list
-    scanid = requestor.start_scan(targets, policy)['scanid']
-    if not follow:
-        sys.stdout.write(scanid + '\n')
-        return
-    while True:
-        resp = requestor.request_results(scanid)
-        if not resp['completed']:
-            time.sleep(10)
-            continue
-        sys.stdout.write(json.dumps(resp, indent=4) + '\n')
-        break
+    return requestor.start_scan(targets, policy)['scanid']
 
 def config_from_env():
     try:
@@ -267,7 +266,14 @@ def domain():
                 targets = ','.join([x.strip() for x in fd.readlines() if x[0] != '#'])
         except IOError:
             targets = args.s
-        run_scan(targets, args.p, follow=args.f, mozdef=args.mozdef)
+        scanid = run_scan(targets, args.p, follow=args.f, mozdef=args.mozdef)
+        if args.f:
+            while not requestor.request_scan_completed(scanid):
+                time.sleep(15)
+            get_results(scanid, mozdef=args.mozdef, mincvss=args.mincvss,
+                    serviceapi=args.serviceapi, csv=args.csv)
+        else:
+            sys.stdout.write(scanid + '\n')
     else:
         sys.stdout.write('Must specify something to do\n\n')
         parser.print_help()
