@@ -32,11 +32,12 @@ class ScanAPIConfig(object):
         self.appkeys = []
 
 class ScanAPIParser(object):
-    def __init__(self, content, hostinfo, timeinfo, mincvss=None):
+    def __init__(self, content, hostinfo, timeinfo, mincvss=None, nooutput=False):
         self._result = []
         self._content = content
         self._hostinfo = hostinfo
         self._timeinfo = timeinfo
+        self._nooutput = nooutput
         self._fd = StringIO.StringIO(self._content)
         self._reader = csv.reader(self._fd)
         self._state = {}
@@ -117,9 +118,10 @@ class ScanAPIParser(object):
         newvuln = {
                 'risk': entry['risk'].lower(),
                 'name': entry['name'],
-                'output': entry['output'],
                 'vulnerable_packages': []
                 }
+        if not self._nooutput:
+            newvuln['output'] = entry['output']
         if entry['cve'] != '':
             newvuln.update({'cve': entry['cve'], 'cvss': entry['cvss']})
 
@@ -330,14 +332,15 @@ class ScanAPIScanner(object):
         return self._scanner.action('scans/' + str(scan['id']) + '/export/' +
                 str(fileid) + '/download', method='get', download=True)
 
-    def scan_results(self, scanid, mincvss=None):
+    def scan_results(self, scanid, mincvss=None, nooutput=False):
         ret = {}
         # export and transform the entire scan result set; use csv output here
         content = self.scan_results_csv(scanid)
         hostinfo = self._supplemental_hostinfo(scanid)
         timeinfo = self._supplemental_timeinfo(scanid)
         ret['zone'] = cfg.zone
-        ret['details'] = ScanAPIParser(content, hostinfo, timeinfo, mincvss=mincvss).result()
+        ret['details'] = ScanAPIParser(content, hostinfo, timeinfo,
+                mincvss=mincvss, nooutput=nooutput).result()
         return ret
 
     def get_policies(self, filter_scanapi=False):
@@ -451,10 +454,13 @@ def api_get_scan_results():
     ret = {'completed': False}
     scanid = request.args.get('scanid')
     mincvss = request.args.get('mincvss')
+    nooutput = False
+    if request.args.get('nooutput') != None:
+        nooutput = True
     if not scanner.scan_completed(scanid):
         return json.dumps(ret)
     ret['completed'] = True
-    ret['results'] = scanner.scan_results(scanid, mincvss=mincvss)
+    ret['results'] = scanner.scan_results(scanid, mincvss=mincvss, nooutput=nooutput)
     return response(json.dumps(ret))
 
 @app.route('/api/v1/scan', methods=['POST'])

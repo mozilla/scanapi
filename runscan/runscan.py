@@ -73,8 +73,12 @@ class ScanAPIRequestor(object):
     def request_scan_completed(self, scanid):
         return self.request_results(scanid)['completed']
 
-    def request_results(self, scanid, mincvss=None):
-        self.request('scan/results', 'get', params={'scanid': scanid, 'mincvss': mincvss})
+    def request_results(self, scanid, mincvss=None, nooutput=False):
+        noflag = None
+        if nooutput:
+            noflag = '1'
+        self.request('scan/results', 'get', params={'scanid': scanid, 'mincvss': mincvss,
+            'nooutput': noflag})
         return self.body
 
     def request_results_csv(self, scanid):
@@ -180,14 +184,15 @@ def get_policies():
         sys.stdout.write('id={} name=\'{}\' description=\'{}\'\n'.format(x['id'],
             x['name'], x['description']))
 
-def get_results(scanid, mozdef=None, mincvss=None, serviceapi=None, csv=False):
+def get_results(scanid, mozdef=None, mincvss=None, serviceapi=None, csv=False,
+        nooutput=False):
     if not requestor.request_scan_completed(scanid):
         sys.stdout.write('Scan incomplete\n')
         return
     if csv:
         sys.stdout.write(requestor.request_results_csv(scanid))
         return
-    resp = requestor.request_results(scanid, mincvss=mincvss)
+    resp = requestor.request_results(scanid, mincvss=mincvss, nooutput=nooutput)
     if serviceapi != None:
         resp = ScanAPIServices(resp, serviceapi).execute()
     if mozdef == None:
@@ -230,6 +235,8 @@ def domain():
             metavar='mozdefurl')
     parser.add_argument('--mincvss', help='filter vulnerabilities below specified cvss score',
             metavar='cvss')
+    parser.add_argument('--nooutput', help='don\'t include plugin output in results',
+            action='store_true')
     parser.add_argument('--serviceapi', help='integrate with serviceapi for host ownership and indicators' +
             ', used when fetching results', metavar='sapiurl')
     parser.add_argument('-s', help='run scan on comma separated targets, can also be filename with targets',
@@ -252,7 +259,7 @@ def domain():
         get_policies()
     elif args.r != None:
         get_results(args.r, mozdef=args.mozdef, mincvss=args.mincvss,
-                serviceapi=args.serviceapi, csv=args.csv)
+                serviceapi=args.serviceapi, csv=args.csv, nooutput=args.nooutput)
     elif args.D != None:
         purge_scans(args.D)
     elif args.s != None:
@@ -271,7 +278,7 @@ def domain():
             while not requestor.request_scan_completed(scanid):
                 time.sleep(15)
             get_results(scanid, mozdef=args.mozdef, mincvss=args.mincvss,
-                    serviceapi=args.serviceapi, csv=args.csv)
+                    serviceapi=args.serviceapi, csv=args.csv, nooutput=nooutput)
         else:
             sys.stdout.write(scanid + '\n')
     else:
