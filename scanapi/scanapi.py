@@ -126,6 +126,11 @@ class ScanAPIParser(object):
         if entry['port'] != '0':
             newvuln.update({'port': int(entry['port']), 'protocol': entry['protocol']})
 
+        if self._mincvss != None and 'cvss' not in newvuln:
+            # if cvss filtering has been indicated, and we don't have a cvss score
+            # for the issue, we filter it.
+            return
+
         if self._mincvss != None and newvuln['cvss'] < self._mincvss:
             return
 
