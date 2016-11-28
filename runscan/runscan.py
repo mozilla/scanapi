@@ -301,7 +301,7 @@ def domain():
             while not requestor.request_scan_completed(scanid):
                 time.sleep(15)
             get_results(scanid, mozdef=args.mozdef, mincvss=args.mincvss,
-                    serviceapi=args.serviceapi, csv=args.csv, nooutput=nooutput)
+                    serviceapi=args.serviceapi, csv=args.csv, nooutput=args.nooutput)
         else:
             sys.stdout.write(scanid + '\n')
     else:
