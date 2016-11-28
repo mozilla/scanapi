@@ -5,6 +5,7 @@ pyasn1
 argparse
 nessrest
 ipaddr
+netaddr
 PyYAML
 flask
 pytz

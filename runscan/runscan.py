@@ -12,6 +12,7 @@ import requests
 import warnings
 import datetime
 import pytz
+from netaddr import IPNetwork, IPAddress, core
 from requests.packages.urllib3 import exceptions as requestexp
 from requests.auth import AuthBase
 
@@ -213,6 +214,24 @@ def run_scan(targets, policy, follow=False, mozdef=None):
     # XXX should validate target list
     return requestor.start_scan(targets, policy)['scanid']
 
+def load_subnet_filters(path):
+    if path == None:
+        return []
+    fd = open(path, 'r')
+    ret = fd.readlines()
+    fd.close()
+    return ret
+
+def target_filter(t, filters):
+    try:
+        ip = IPAddress(t)
+    except core.AddrFormatError: # not an ip
+        return False
+    for i in filters:
+        if ip in IPNetwork(i):
+            return True
+    return False
+
 def config_from_env():
     try:
         return {'apiurl': os.environ['SCANAPIURL'], 'apikey': os.environ['SCANAPIKEY']}
@@ -230,6 +249,8 @@ def domain():
             metavar='capath')
     parser.add_argument('--csv', help='fetch raw results in csv format instead of modified json',
             action='store_true')
+    parser.add_argument('--filter-subnets', help='filter any ip in target list that matches a subnet' + \
+            ' in subnetsfile', metavar='subnetsfile')
     parser.add_argument('--mozdef', help='emit results as vulnerability events to mozdef, ' + \
             'use \'stdout\' as url to just print json to stdout',
             metavar='mozdefurl')
@@ -273,6 +294,8 @@ def domain():
                 targets = ','.join([x.strip() for x in fd.readlines() if x[0] != '#'])
         except IOError:
             targets = args.s
+        filters = load_subnet_filters(args.filter_subnets)
+        targets = ','.join([x for x in targets.split(',') if not target_filter(x, filters)])
         scanid = run_scan(targets, args.p, follow=args.f, mozdef=args.mozdef)
         if args.f:
             while not requestor.request_scan_completed(scanid):
