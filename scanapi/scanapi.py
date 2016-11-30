@@ -133,6 +133,18 @@ class ScanAPIParser(object):
             # for the issue, we filter it.
             return
 
+        if 'cvss' in newvuln and newvuln['cvss'] == '':
+            # handle a case where nessus provides a cve but does not include a cvss
+            # score. we just create one based loosely off the risk label.
+            if newvuln['risk'] == 'low':
+                newvuln['cvss'] = '2.5'
+            elif newvuln['risk'] == 'medium':
+                newvuln['cvss'] = '5.0'
+            elif newvuln['risk'] == 'high':
+                newvuln['cvss'] = '7.5'
+            elif newvuln['risk'] == 'critical':
+                newvuln['cvss'] = '10.0'
+
         if self._mincvss != None and float(newvuln['cvss']) < self._mincvss:
             return
 
