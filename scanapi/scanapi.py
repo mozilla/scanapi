@@ -133,7 +133,7 @@ class ScanAPIParser(object):
             # for the issue, we filter it.
             return
 
-        if self._mincvss != None and newvuln['cvss'] < self._mincvss:
+        if self._mincvss != None and float(newvuln['cvss']) < self._mincvss:
             return
 
         # see if we can pull the vulnerability package names out of the plugin
@@ -459,6 +459,8 @@ def api_get_scan_results():
         nooutput = True
     if not scanner.scan_completed(scanid):
         return json.dumps(ret)
+    if mincvss != None:
+        mincvss = float(mincvss)
     ret['completed'] = True
     ret['results'] = scanner.scan_results(scanid, mincvss=mincvss, nooutput=nooutput)
     return response(json.dumps(ret))
