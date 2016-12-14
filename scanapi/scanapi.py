@@ -122,20 +122,17 @@ class ScanAPIParser(object):
                 }
         if not self._nooutput:
             newvuln['output'] = entry['output']
-        if entry['cve'] != '':
-            newvuln.update({'cve': entry['cve'], 'cvss': entry['cvss']})
 
-        if entry['port'] != '0':
-            newvuln.update({'port': int(entry['port']), 'protocol': entry['protocol']})
-
-        if self._mincvss != None and 'cvss' not in newvuln:
-            # if cvss filtering has been indicated, and we don't have a cvss score
-            # for the issue, we filter it.
-            return
+        if entry['cve'] == '':
+            newvuln['cve'] = 'CVE-NOTAVAILABLE'
+            newvuln['cvss'] = ''
+        else:
+            newvuln['cve'] = entry['cve']
+            newvuln['cvss'] = entry['cvss']
 
         if 'cvss' in newvuln and newvuln['cvss'] == '':
-            # handle a case where nessus provides a cve but does not include a cvss
-            # score. we just create one based loosely off the risk label.
+            # handle a case where no cvss score is provided; we just assign one based
+            # on the risk label of the vulnerability
             if newvuln['risk'] == 'low':
                 newvuln['cvss'] = '2.5'
             elif newvuln['risk'] == 'medium':
@@ -144,6 +141,9 @@ class ScanAPIParser(object):
                 newvuln['cvss'] = '7.5'
             elif newvuln['risk'] == 'critical':
                 newvuln['cvss'] = '10.0'
+
+        if entry['port'] != '0':
+            newvuln.update({'port': int(entry['port']), 'protocol': entry['protocol']})
 
         if self._mincvss != None and float(newvuln['cvss']) < self._mincvss:
             return
