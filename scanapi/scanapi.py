@@ -148,6 +148,12 @@ class ScanAPIParser(object):
         if self._mincvss != None and float(newvuln['cvss']) < self._mincvss:
             return
 
+        # grab any links that are relevant from the entry if possible
+        if 'rhn.redhat.com/errata/RHSA' in entry['seealso']:
+            m = re.search('(http://rhn\.redhat\.com/errata/RHSA.*?\.html)', entry['seealso'])
+            if m != None and len(m.groups()) == 1:
+                newvuln['link'] = m.group(1)
+
         # see if we can pull the vulnerability package names out of the plugin
         # output
         if 'Remote package installed' in entry['output']:
