@@ -254,6 +254,7 @@ class ScanAPIEnrich(object):
         mtime = os.path.getmtime(self._rpm2cve)
         if mtime == self._rpm2cve_timestamp:
             return
+        self._rpm2cve_timestamp = mtime
         self._rpm2cvedata = {}
         e = xml.etree.ElementTree.parse(self._rpm2cve).getroot()
         for rpm in e:
