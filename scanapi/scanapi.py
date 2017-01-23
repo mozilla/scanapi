@@ -7,6 +7,7 @@ import sys
 import argparse
 import uuid
 import time
+import os.path
 import datetime
 import pytz
 import csv
@@ -16,6 +17,7 @@ import re
 import ipaddr
 import yaml
 import json
+import xml.etree.ElementTree
 import warnings
 from requests.packages.urllib3 import exceptions as requestexp
 from flask import Flask, Response, request, jsonify, abort
@@ -30,14 +32,16 @@ class ScanAPIConfig(object):
         self.nessescacert = None
         self.zone = 'scanapi'
         self.appkeys = []
+        self.rpm2cve = None
 
 class ScanAPIParser(object):
-    def __init__(self, content, hostinfo, timeinfo, mincvss=None, nooutput=False):
+    def __init__(self, content, hostinfo, timeinfo, enrich, mincvss=None, nooutput=False):
         self._result = []
         self._content = content
         self._hostinfo = hostinfo
         self._timeinfo = timeinfo
         self._nooutput = nooutput
+        self._enrich = enrich
         self._fd = StringIO.StringIO(self._content)
         self._reader = csv.reader(self._fd)
         self._state = {}
@@ -171,6 +175,15 @@ class ScanAPIParser(object):
             if m != None:
                 newvuln['vulnerable_packages'].append(m.group(1).strip())
 
+        # if this was an RHSA, and we still have no package details, attempt to add
+        # it using the enrichment data
+        if 'RHSA' in newvuln['link'] and len(newvuln['vulnerable_packages']) == 0:
+            m = re.search('(RHSA.+)\.html', newvuln['link'])
+            if m != None and len(m.groups()) == 1:
+                i = m.group(1).rindex('-')
+                rhsa = m.group(1)[:i] + ':' + m.group(1)[i+1:]
+                newvuln['vulnerable_packages'] = self._enrich.packages_from_rhsa(rhsa)
+
         self._state[entry['host']]['vulnerabilities'].append(newvuln)
 
     def _build_results(self):
@@ -215,11 +228,53 @@ class ScanAPIParser(object):
     def result(self):
         return self._result
 
+class ScanAPIEnrich(object):
+    def __init__(self, rpm2cve):
+        self._rpm2cve = rpm2cve
+        self._rpm2cve_timestamp = 0.0
+        self._rpm2cvedata = {}
+        self._init_rpm2cve()
+
+    def _shorten_package(self, pkgname):
+        mg = re.match('^(.+?)[.\-_]\d+?[.\-_]?', pkgname)
+        if mg == None or len(mg.groups()) != 1:
+            return pkgname
+        return mg.group(1)
+
+    def refresh(self):
+        self._init_rpm2cve()
+
+    def packages_from_rhsa(self, rhsa):
+        if rhsa in self._rpm2cvedata:
+            return self._rpm2cvedata[rhsa]['packages']
+
+    def _init_rpm2cve(self):
+        if self._rpm2cve == None:
+            return
+        mtime = os.path.getmtime(self._rpm2cve)
+        if mtime == self._rpm2cve_timestamp:
+            return
+        self._rpm2cve_timestamp = mtime
+        self._rpm2cvedata = {}
+        e = xml.etree.ElementTree.parse(self._rpm2cve).getroot()
+        for rpm in e:
+            rhsa = rpm.find('erratum').text
+            cve = rpm.findall('cve')
+            if rhsa not in self._rpm2cvedata:
+                self._rpm2cvedata[rhsa] = {'packages': [], 'cves': []}
+            pkgname = self._shorten_package(rpm.attrib['rpm'])
+            if pkgname not in self._rpm2cvedata[rhsa]['packages']:
+                self._rpm2cvedata[rhsa]['packages'].append(pkgname)
+            for i in cve:
+                if i.text not in self._rpm2cvedata[rhsa]['cves']:
+                    self._rpm2cvedata[rhsa]['cves'].append(i.text)
+
 class ScanAPIScanner(object):
     def __init__(self, cfg):
         self._url = cfg.nessusurl
         self._akey = cfg.nessusakey
         self._skey = cfg.nessusskey
+        self._enrich = ScanAPIEnrich(cfg.rpm2cve)
         caoption = ''
         insecure = True
         if cfg.nessuscacert != None:
@@ -357,8 +412,9 @@ class ScanAPIScanner(object):
         hostinfo = self._supplemental_hostinfo(scanid)
         timeinfo = self._supplemental_timeinfo(scanid)
         ret['zone'] = cfg.zone
+        self._enrich.refresh()
         ret['details'] = ScanAPIParser(content, hostinfo, timeinfo,
-                mincvss=mincvss, nooutput=nooutput).result()
+                self._enrich, mincvss=mincvss, nooutput=nooutput).result()
         return ret
 
     def get_policies(self, filter_scanapi=False):
@@ -410,6 +466,10 @@ def load_config(confpath):
         sect = yamlcfg['scanapi']
         if 'zone' in sect:
             cfg.zone = yamlcfg['scanapi']['zone']
+    if 'enrichment' in yamlcfg:
+        sect = yamlcfg['enrichment']
+        if 'rpm2cve' in sect:
+            cfg.rpm2cve = sect['rpm2cve']
 
 def domain():
     global scanner
