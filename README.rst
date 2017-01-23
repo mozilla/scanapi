@@ -67,10 +67,12 @@ API. If no ``appkeys`` section is present, no authentication against scanapi wil
 occur.
 
 The ``enrichment`` section can be used to specify external data sources used to
-supplement returned results. This is currently limited to the ``rpm2cve`` option
-which if specified, will read ``rpm-to-cve.xml`` (available from RedHat) from the
-file system and add vulnerable package details to result entries specifically for
-RHSAs.
+supplement returned results. The ``rpm2cve`` option if specified, will read
+``rpm-to-cve.xml`` (available from RedHat) from the file system and add vulnerable
+package details to result entries specifically for RHSAs. The ``exemptplugins``
+option if specified indicates a file containing plugins IDs that will be excluded
+from the vulnerabilities section of a result set. Results for matching plugins will
+instead be included in the exempt_vulnerabilities section of the result.
 
 Run scanapi
 ~~~~~~~~~~~

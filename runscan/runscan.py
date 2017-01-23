@@ -131,6 +131,8 @@ class ScanAPIMozDef(object):
                 }
         if 'owner' in result:
             event['asset']['owner'] = result['owner']
+        if 'exempt_vulnerabilities' in result:
+            event['exempt_vulnerabilities'] = result['exempt_vulnerabilities']
         return event
 
 class ScanAPIServices(object):

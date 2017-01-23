@@ -33,6 +33,7 @@ class ScanAPIConfig(object):
         self.zone = 'scanapi'
         self.appkeys = []
         self.rpm2cve = None
+        self.exemptplugins = None
 
 class ScanAPIParser(object):
     def __init__(self, content, hostinfo, timeinfo, enrich, mincvss=None, nooutput=False):
@@ -60,12 +61,13 @@ class ScanAPIParser(object):
         s = None
         if entry['host'] not in self._state:
             s = {
-                    'vulnerabilities':     [],
-                    'ports':               set(),
-                    'hostname':            None,
-                    'ipaddress':           None,
-                    'os':                  None,
-                    'credentialed_checks': False
+                    'vulnerabilities':        [],
+                    'exempt_vulnerabilities': [],
+                    'ports':                  set(),
+                    'hostname':               None,
+                    'ipaddress':              None,
+                    'os':                     None,
+                    'credentialed_checks':    False
                     }
         else:
             s = self._state[entry['host']]
@@ -184,20 +186,24 @@ class ScanAPIParser(object):
                 rhsa = m.group(1)[:i] + ':' + m.group(1)[i+1:]
                 newvuln['vulnerable_packages'] = self._enrich.packages_from_rhsa(rhsa)
 
-        self._state[entry['host']]['vulnerabilities'].append(newvuln)
+        if self._enrich.plugin_exempt(entry['pluginid']):
+            self._state[entry['host']]['exempt_vulnerabilities'].append(newvuln)
+        else:
+            self._state[entry['host']]['vulnerabilities'].append(newvuln)
 
     def _build_results(self):
         for k, v in self._state.iteritems():
             newres = {
-                    'target':              k,
-                    'vulnerabilities':     v['vulnerabilities'],
-                    'ports':               list(v['ports']),
-                    'hostname':            v['hostname'],
-                    'ipaddress':           v['ipaddress'],
-                    'os':                  v['os'],
-                    'credentialed_checks': v['credentialed_checks'],
-                    'scan_start':          self._timeinfo['start'],
-                    'scan_end':            self._timeinfo['end']
+                    'target':                 k,
+                    'vulnerabilities':        v['vulnerabilities'],
+                    'exempt_vulnerabilities': v['exempt_vulnerabilities'],
+                    'ports':                  list(v['ports']),
+                    'hostname':               v['hostname'],
+                    'ipaddress':              v['ipaddress'],
+                    'os':                     v['os'],
+                    'credentialed_checks':    v['credentialed_checks'],
+                    'scan_start':             self._timeinfo['start'],
+                    'scan_end':               self._timeinfo['end']
                     }
             self._result.append(newres)
 
@@ -206,7 +212,7 @@ class ScanAPIParser(object):
             if row[0] == 'Plugin ID': # skip headers
                 continue
             entry = {
-                    'pluginid':    row[0],
+                    'pluginid':    int(row[0]),
                     'cve':         row[1],
                     'cvss':        row[2],
                     'risk':        row[3],
@@ -229,11 +235,15 @@ class ScanAPIParser(object):
         return self._result
 
 class ScanAPIEnrich(object):
-    def __init__(self, rpm2cve):
+    def __init__(self, rpm2cve, exemptplugins):
         self._rpm2cve = rpm2cve
         self._rpm2cve_timestamp = 0.0
         self._rpm2cvedata = {}
+        self._exemptplugins = exemptplugins
+        self._exemptplugins_timestamp = 0.0
+        self._exemptpluginsdata = []
         self._init_rpm2cve()
+        self._init_exemptplugins()
 
     def _shorten_package(self, pkgname):
         mg = re.match('^(.+?)[.\-_]\d+?[.\-_]?', pkgname)
@@ -243,10 +253,33 @@ class ScanAPIEnrich(object):
 
     def refresh(self):
         self._init_rpm2cve()
+        self._init_exemptplugins()
 
     def packages_from_rhsa(self, rhsa):
         if rhsa in self._rpm2cvedata:
             return self._rpm2cvedata[rhsa]['packages']
+
+    def plugin_exempt(self, pluginid):
+        if pluginid in self._exemptpluginsdata:
+            return True
+        return False
+
+    def _init_exemptplugins(self):
+        if self._exemptplugins == None:
+            return
+        mtime = os.path.getmtime(self._exemptplugins)
+        if mtime == self._exemptplugins_timestamp:
+            return
+        self._exemptplugins_timestamp = mtime
+        self._exemptpluginsdata = []
+        fd = open(self._exemptplugins, 'r')
+        buf = fd.readlines()
+        fd.close()
+        for i in buf:
+            entry = i.strip()
+            if entry == '' or (len(entry) > 0 and entry[0] == '#'):
+                continue
+            self._exemptpluginsdata.append(int(entry))
 
     def _init_rpm2cve(self):
         if self._rpm2cve == None:
@@ -274,7 +307,7 @@ class ScanAPIScanner(object):
         self._url = cfg.nessusurl
         self._akey = cfg.nessusakey
         self._skey = cfg.nessusskey
-        self._enrich = ScanAPIEnrich(cfg.rpm2cve)
+        self._enrich = ScanAPIEnrich(cfg.rpm2cve, cfg.exemptplugins)
         caoption = ''
         insecure = True
         if cfg.nessuscacert != None:
@@ -470,6 +503,8 @@ def load_config(confpath):
         sect = yamlcfg['enrichment']
         if 'rpm2cve' in sect:
             cfg.rpm2cve = sect['rpm2cve']
+        if 'exemptplugins' in sect:
+            cfg.exemptplugins = sect['exemptplugins']
 
 def domain():
     global scanner

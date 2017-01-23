@@ -3,7 +3,10 @@ nessus:
   accesskey: apiaccesskey
   secretkey: apisecretkey
 enrichment:
+  # Specify external data sources to use for event enrichment, remove any
+  # options not desired to disable the functionality
   rpm2cve: path_to_rpm-to-cve.xml
+  exemptplugins: path_to_exempt_plugins.txt
 scanapi:
   zone: myzonename
 appkeys:
