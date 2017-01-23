@@ -66,6 +66,12 @@ must be sent in the SCANAPIKEY header to authenticate when making requests to th
 API. If no ``appkeys`` section is present, no authentication against scanapi will
 occur.
 
+The ``enrichment`` section can be used to specify external data sources used to
+supplement returned results. This is currently limited to the ``rpm2cve`` option
+which if specified, will read ``rpm-to-cve.xml`` (available from RedHat) from the
+file system and add vulnerable package details to result entries specifically for
+RHSAs.
+
 Run scanapi
 ~~~~~~~~~~~
 
