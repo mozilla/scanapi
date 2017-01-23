@@ -177,7 +177,7 @@ class ScanAPIParser(object):
 
         # if this was an RHSA, and we still have no package details, attempt to add
         # it using the enrichment data
-        if 'RHSA' in newvuln['link'] and len(newvuln['vulnerable_packages']) == 0:
+        if 'link' in newvuln and 'RHSA' in newvuln['link'] and len(newvuln['vulnerable_packages']) == 0:
             m = re.search('(RHSA.+)\.html', newvuln['link'])
             if m != None and len(m.groups()) == 1:
                 i = m.group(1).rindex('-')
