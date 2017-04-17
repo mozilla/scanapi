@@ -53,7 +53,7 @@ class ScanAPIParser(object):
         for x in self._hostinfo:
             if 'host-fqdn' in x and x['host-fqdn'] == entry['host']:
                 return x
-            if x['host-ip'] == entry['host']:
+            if 'host-ip' in x and x['host-ip'] == entry['host']:
                 return x
         return None
 
