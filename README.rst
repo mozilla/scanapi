@@ -74,6 +74,17 @@ option if specified indicates a file containing plugins IDs that will be exclude
 from the vulnerabilities section of a result set. Results for matching plugins will
 instead be included in the exempt_vulnerabilities section of the result.
 
+Nessus policy creation
+~~~~~~~~~~~~~~~~~~~~~~
+
+Policies available to the user scanapi uses to talk to Nessus will be available to use
+for scans using scanapi.
+
+Note that when creating a policy, ensure the Nessus policy option that removes plugin
+results for plugins called as a dependency is disabled. We want to make sure the results
+of these plugins are included in the result set, as they are used to piece together
+various information about the asset by scanapi.
+
 Run scanapi
 ~~~~~~~~~~~
 
