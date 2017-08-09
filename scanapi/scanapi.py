@@ -29,6 +29,7 @@ class ScanAPIConfig(object):
         self.nessusurl = None
         self.nessusakey = None
         self.nessusskey = None
+        self.nessusverifycert = True
         self.zone = 'scanapi'
         self.appkeys = []
         self.rpm2cve = None
@@ -486,8 +487,6 @@ def load_config(confpath):
     cfg.nessusskey = yamlcfg['nessus']['secretkey']
     if 'verifycert' in sect:
         cfg.nessusverifycert = yamlcfg['nessus']['verifycert']
-    else:
-        cfg.nessusverifycert = True
     if 'appkeys' in yamlcfg:
         sect = yamlcfg['appkeys']
         for k, v in sect.iteritems():
