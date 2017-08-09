@@ -16,13 +16,6 @@ from netaddr import IPNetwork, IPAddress, core
 from requests.packages.urllib3 import exceptions as requestexp
 from requests.auth import AuthBase
 
-havepyservicelib = False
-try:
-    import pyservicelib
-    havepyservicelib = True
-except ImportError:
-    pass
-
 class ScanAPIAuth(AuthBase):
     def __init__(self, apikey):
         self._apikey = apikey
@@ -135,48 +128,86 @@ class ScanAPIMozDef(object):
         return event
 
 class ScanAPIServices(object):
-    def __init__(self, response, sapi):
-        if not havepyservicelib:
-            raise Exception('pyservicelib is not available')
+    def __init__(self, response, sapi, sapikey=''):
         self._content = response
         self._sapiurl = sapi
-        pyservicelib.config.apihost = self._sapiurl
-        pyservicelib.config.sslverify = False
+        self._sapikey = sapikey
 
     def execute(self):
-        self.execute_ownership()
         self.execute_indicators()
+        self.execute_ownership()
         return self._content
 
     def execute_indicators(self):
-        ind = pyservicelib.Indicators()
         # submit indicator to serviceapi for each host including if a credentialed
         # check was successful or not
         for x in self._content['results']['details']:
-            ind.add_host(x['hostname'], 'vuln', 'scanapi', x['credentialed_checks'])
-        ind.execute()
+            # for the indicator value, find the highest level reported vulnerability in the
+            # results for a given host; unknown if credentialed checks is false
+            level = 1
+            for v in x['vulnerabilities']:
+                if v['risk'] == 'critical':
+                    tv = 4
+                elif v['risk'] == 'high':
+                    tv = 3
+                elif v['risk'] == 'medium':
+                    tv = 2
+                elif v['risk'] == 'low':
+                    tv = 1
+                else:
+                    tv = 0
+                if tv > level:
+                    level = tv
+            if x['credentialed_checks']:
+                if level == 4:
+                    lind = 'maximum'
+                elif level == 3:
+                    lind = 'high'
+                elif level == 2:
+                    lind = 'medium'
+                else:
+                    lind = 'low'
+            else:
+                lind = 'unknown'
+            ind = {
+                    'asset_type': 'hostname',
+                    'asset_identifier': x['hostname'],
+                    'zone': self._content['results']['zone'],
+                    'description': 'scanapi vulnerability result',
+                    'timestamp_utc': pytz.timezone('UTC').localize(datetime.datetime.utcnow()).isoformat(),
+                    'event_source_name': 'scanapi',
+                    'likelihood_indicator': lind,
+                    'details': {}
+                    }
+            headers = {'SERVICEAPIKEY': self._sapikey}
+            r = requests.post(self._sapiurl + '/api/v1/indicator', data=json.dumps(ind), headers=headers)
+            if r.status_code != 200:
+                sys.stderr.write('warning: serviceapi indicator post failed with code {}\n'.format(r.status_code))
 
     def execute_ownership(self):
-        s = pyservicelib.Search()
         hosts = set(x['hostname'] for x in self._content['results']['details'])
+        respmap = {}
         for x in hosts:
-            s.add_host(x, confidence=10)
-        s.execute()
-        for x in hosts:
-            owner = {
-                    'operator': 'unknown',
-                    'team':     'unknown',
-                    'v2bkey':   'unknown'
-                    }
-            result = s.result_host(x)
-            if 'found' in result and result['found'] and 'owner' in result:
-                ownerinfo = result['owner']
-                if 'v2bkey' in ownerinfo and 'team' in ownerinfo and 'operator' in ownerinfo:
-                    owner = ownerinfo
+            params = {'hostname': x}
+            headers = {'SERVICEAPIKEY': self._sapikey}
+            r = requests.get(self._sapiurl + '/api/v1/owner/hostname', params=params, headers=headers)
+            if r.status_code == 200:
+                respmap[x] = json.loads(r.text)
+            else:
+                respmap[x] = {
+                        'operator': 'unset',
+                        'team': 'unset',
+                        'triagekey': 'unset-unset'
+                        }
+        for x in respmap:
             for y in range(len(self._content['results']['details'])):
                 if self._content['results']['details'][y]['hostname'] != x:
                     continue
-                self._content['results']['details'][y]['owner'] = owner
+                self._content['results']['details'][y]['owner'] = {
+                        'operator': respmap[x]['operator'],
+                        'team': respmap[x]['team'],
+                        'v2bkey': respmap[x]['triagekey']
+                        }
 
 requestor = None
 
@@ -188,6 +219,11 @@ def get_policies():
 
 def get_results(scanid, mozdef=None, mincvss=None, serviceapi=None, csv=False,
         nooutput=False):
+    if serviceapi != None:
+        sapikey = os.getenv('SERVICEAPIKEY')
+        if sapikey == None:
+            sys.stderr.write('Error: serviceapi integration requested but SERVICEAPIKEY not found in environment\n')
+            sys.exit(1)
     if not requestor.request_scan_completed(scanid):
         sys.stdout.write('Scan incomplete\n')
         return
@@ -196,7 +232,7 @@ def get_results(scanid, mozdef=None, mincvss=None, serviceapi=None, csv=False,
         return
     resp = requestor.request_results(scanid, mincvss=mincvss, nooutput=nooutput)
     if serviceapi != None:
-        resp = ScanAPIServices(resp, serviceapi).execute()
+        resp = ScanAPIServices(resp, serviceapi, sapikey=sapikey).execute()
     if mozdef == None:
         sys.stdout.write(json.dumps(resp, indent=4) + '\n')
     else:
