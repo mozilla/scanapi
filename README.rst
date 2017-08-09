@@ -183,14 +183,14 @@ runscan.
 ::
 
         $ ./runscan.py -h
-        usage: runscan.py [-h] [--capath capath] [--csv]
+        usage: runscan.py [-h] [--noverify] [--csv]
                   [--filter-subnets subnetsfile] [--mozdef mozdefurl]
                   [--mincvss cvss] [--nooutput] [--serviceapi sapiurl]
                   [-s targets] [-p policy] [-D seconds] [-f] [-P] [-r scan id]
         
         optional arguments:
         -h, --help            show this help message and exit
-        --capath capath       path to ca certificate
+        --noverify            skip verification of certificates
         --csv                 fetch raw results in csv format instead of modified
                               json
         --filter-subnets subnetsfile
