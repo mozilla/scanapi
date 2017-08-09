@@ -2,6 +2,7 @@ nessus:
   url: https://nessus.server:8834
   accesskey: apiaccesskey
   secretkey: apisecretkey
+  verifycert: true
 enrichment:
   # Specify external data sources to use for event enrichment, remove any
   # options not desired to disable the functionality

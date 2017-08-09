@@ -32,14 +32,13 @@ class ScanAPIAuth(AuthBase):
         return r
 
 class ScanAPIRequestor(object):
-    def __init__(self, url, key, capath=None):
+    def __init__(self, url, key, noverify=False):
         self._url = url
         self._key = key
         self._baseurl = url + '/api/v1'
-        if capath != None:
-            self._verify = capath
-        else:
-            self._verify = True
+        self._verify = True
+        if noverify:
+            self._verify = False
         self.body = None
 
     def _urlfrombase(self, ep):
@@ -247,8 +246,8 @@ def domain():
     parser = argparse.ArgumentParser(epilog='The targets parameter can either contain' + \
             ' a comma separated list of targets, or a path to a file containing a target' + \
             ' list. If a file is used, it should contain one target per line.')
-    parser.add_argument('--capath', help='path to ca certificate',
-            metavar='capath')
+    parser.add_argument('--noverify', help='skip verification of certificates',
+            action='store_true')
     parser.add_argument('--csv', help='fetch raw results in csv format instead of modified json',
             action='store_true')
     parser.add_argument('--filter-subnets', help='filter any ip in target list that matches a subnet' + \
@@ -274,10 +273,7 @@ def domain():
     parser.add_argument('-r', help='fetch results', metavar='scan id')
     args = parser.parse_args()
     ecfg = config_from_env()
-    capath = True # verify parameter for requests, default to enabled
-    if args.capath != None:
-        capath = args.capath
-    requestor = ScanAPIRequestor(ecfg['apiurl'], ecfg['apikey'], capath=capath)
+    requestor = ScanAPIRequestor(ecfg['apiurl'], ecfg['apikey'], noverify=args.noverify)
     if args.P:
         get_policies()
     elif args.r != None:

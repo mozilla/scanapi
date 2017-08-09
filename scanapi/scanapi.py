@@ -29,7 +29,6 @@ class ScanAPIConfig(object):
         self.nessusurl = None
         self.nessusakey = None
         self.nessusskey = None
-        self.nessescacert = None
         self.zone = 'scanapi'
         self.appkeys = []
         self.rpm2cve = None
@@ -309,10 +308,9 @@ class ScanAPIScanner(object):
         self._skey = cfg.nessusskey
         self._enrich = ScanAPIEnrich(cfg.rpm2cve, cfg.exemptplugins)
         caoption = ''
-        insecure = True
-        if cfg.nessuscacert != None:
-            caoption = cfg.nessuscacert
-            insecure = False
+        insecure = False
+        if not cfg.nessusverifycert:
+            insecure = True
         self._scanner = ness6rest.Scanner(url=self._url, api_akey=self._akey, api_skey=self._skey,
                 insecure=insecure, ca_bundle=caoption)
 
@@ -487,8 +485,10 @@ def load_config(confpath):
     cfg.nessusurl = yamlcfg['nessus']['url']
     cfg.nessusakey = yamlcfg['nessus']['accesskey']
     cfg.nessusskey = yamlcfg['nessus']['secretkey']
-    if 'cacert' in sect:
-        cfg.nessuscacert = yamlcfg['nessus']['cacert']
+    if 'verifycert' in sect:
+        cfg.nessusverifycert = yamlcfg['nessus']['verifycert']
+    else:
+        cfg.nessusverifycert = True
     if 'appkeys' in yamlcfg:
         sect = yamlcfg['appkeys']
         for k, v in sect.iteritems():
