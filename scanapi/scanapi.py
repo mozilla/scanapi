@@ -307,12 +307,11 @@ class ScanAPIScanner(object):
         self._akey = cfg.nessusakey
         self._skey = cfg.nessusskey
         self._enrich = ScanAPIEnrich(cfg.rpm2cve, cfg.exemptplugins)
-        caoption = ''
         insecure = False
         if not cfg.nessusverifycert:
             insecure = True
         self._scanner = ness6rest.Scanner(url=self._url, api_akey=self._akey, api_skey=self._skey,
-                insecure=insecure, ca_bundle=caoption)
+                insecure=insecure)
 
     def _unique_scan_id(self):
         return 'scanapi-' + str(uuid.uuid4())
