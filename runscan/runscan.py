@@ -145,20 +145,42 @@ class ScanAPIServices(object):
             # for the indicator value, find the highest level reported vulnerability in the
             # results for a given host; unknown if credentialed checks is false
             level = 1
+            # seentitles tracks the titles of vulnerabilities we have already seen, so when
+            # we are counting we don't count the same issue twice (e.g., more than one entry
+            # may be present if a single vulnerability is represented my more than one
+            # CVE
+            seentitles = []
+            details = {
+                    'maximum': 0,
+                    'high': 0,
+                    'medium': 0,
+                    'low': 0,
+                    'coverage': False
+                    }
             for v in x['vulnerabilities']:
                 if v['risk'] == 'critical':
                     tv = 4
+                    if v['name'] not in seentitles:
+                        details['maximum'] += 1
                 elif v['risk'] == 'high':
                     tv = 3
+                    if v['name'] not in seentitles:
+                        details['high'] += 1
                 elif v['risk'] == 'medium':
                     tv = 2
+                    if v['name'] not in seentitles:
+                        details['medium'] += 1
                 elif v['risk'] == 'low':
                     tv = 1
+                    if v['name'] not in seentitles:
+                        details['low'] += 1
                 else:
                     tv = 0
+                seentitles.append(v['name'])
                 if tv > level:
                     level = tv
             if x['credentialed_checks']:
+                details['coverage'] = True
                 if level == 4:
                     lind = 'maximum'
                 elif level == 3:
@@ -177,7 +199,7 @@ class ScanAPIServices(object):
                     'timestamp_utc': pytz.timezone('UTC').localize(datetime.datetime.utcnow()).isoformat(),
                     'event_source_name': 'scanapi',
                     'likelihood_indicator': lind,
-                    'details': {}
+                    'details': details
                     }
             headers = {'SERVICEAPIKEY': self._sapikey}
             r = requests.post(self._sapiurl + '/api/v1/indicator', data=json.dumps(ind), headers=headers)
