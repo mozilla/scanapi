@@ -1,3 +1,12 @@
+DEPRECATION NOTICE [04-03-2019]
+=======
+
+Mozilla no longer makes use of this code internally nor does it maintain this code due to incompatibilities with newer version of the Nessus API.
+
+You are welcome to use this code as a reference or for your own use, but doing so will be 'as is'.
+
+If you would like to take or transfer ownership of this project, please let us know.
+
 scanapi
 =======
 
